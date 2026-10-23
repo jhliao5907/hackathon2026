@@ -40,6 +40,38 @@ mcpServers:
 	}
 }
 
+func TestSecretNamesIncludesLLMProxyTemplates(t *testing.T) {
+	cfg := &Config{
+		LLMProxies: map[string]LLMProxy{
+			"anthropic": {Target: "https://a", Headers: map[string]string{"x-api-key": "anthropic-key"}},
+			"openai":    {Target: "https://o", Headers: map[string]string{"Authorization": "Bearer ${openai-key}"}},
+		},
+	}
+	got := map[string]bool{}
+	for _, n := range cfg.SecretNames() {
+		got[n] = true
+	}
+	// 整值即密钥名 与 ${模板} 两种写法都应被识别。
+	if !got["anthropic-key"] || !got["openai-key"] {
+		t.Errorf("SecretNames 应含 anthropic-key 与 openai-key，实际: %v", got)
+	}
+}
+
+func TestSecretRefsAndResolve(t *testing.T) {
+	if got := SecretRefs("anthropic-key"); len(got) != 1 || got[0] != "anthropic-key" {
+		t.Errorf("整值写法解析错误: %v", got)
+	}
+	if got := SecretRefs("Bearer ${k}"); len(got) != 1 || got[0] != "k" {
+		t.Errorf("模板写法解析错误: %v", got)
+	}
+	out, err := ResolveSecretTemplate("Bearer ${k}", func(n string) (string, error) {
+		return map[string]string{"k": "secret"}[n], nil
+	})
+	if err != nil || out != "Bearer secret" {
+		t.Errorf("模板解析 = %q, err=%v", out, err)
+	}
+}
+
 func TestLoadMissingCommand(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.yaml")

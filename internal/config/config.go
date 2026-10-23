@@ -9,6 +9,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -44,8 +46,10 @@ type LLMProxy struct {
 	// ClientEnv 是注入到容器的环境变量；值里的占位符 {proxy} 会被替换为本代理的 URL。
 	// 例：ANTHROPIC_BASE_URL: "{proxy}"。
 	ClientEnv map[string]string `yaml:"clientEnv"`
-	// Headers 把要注入到上游请求的 HTTP 头名映射到 keyring 中的密钥名。
-	// 例：x-api-key -> anthropic-key（值是密钥名）。
+	// Headers 声明要注入到上游请求的 HTTP 头。值支持两种写法：
+	//   1) 整个值即密钥名：     x-api-key: anthropic-key
+	//   2) 模板，${名} 处替换：  Authorization: "Bearer ${openai-key}"
+	// 两种写法里出现的都是「密钥名」，真实密钥由 injector 在转发时从 keyring 取出注入。
 	Headers map[string]string `yaml:"headers"`
 }
 
@@ -98,9 +102,48 @@ func (c *Config) SecretNames() []string {
 		}
 	}
 	for _, p := range c.LLMProxies {
-		for _, keyName := range p.Headers {
-			add(keyName)
+		for _, headerVal := range p.Headers {
+			for _, keyName := range SecretRefs(headerVal) {
+				add(keyName)
+			}
 		}
 	}
 	return out
+}
+
+// secretRefRe 匹配 header 值里的 ${密钥名} 模板片段。
+var secretRefRe = regexp.MustCompile(`\$\{([^}]+)\}`)
+
+// SecretRefs 返回一个 header 值里引用到的所有密钥名：
+//   - 含 ${名} 模板时，返回所有被引用的名字；
+//   - 否则整个值即为密钥名。
+func SecretRefs(value string) []string {
+	m := secretRefRe.FindAllStringSubmatch(value, -1)
+	if len(m) == 0 {
+		return []string{value}
+	}
+	out := make([]string, 0, len(m))
+	for _, g := range m {
+		out = append(out, g[1])
+	}
+	return out
+}
+
+// ResolveSecretTemplate 把 header 值解析成最终字符串：
+//   - 含 ${名} 模板时，逐一用 get(名) 替换；
+//   - 否则整个值即为密钥名，返回 get(值)。
+func ResolveSecretTemplate(value string, get func(string) (string, error)) (string, error) {
+	if !strings.Contains(value, "${") {
+		return get(value)
+	}
+	var firstErr error
+	res := secretRefRe.ReplaceAllStringFunc(value, func(tok string) string {
+		name := tok[2 : len(tok)-1]
+		v, err := get(name)
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+		return v
+	})
+	return res, firstErr
 }

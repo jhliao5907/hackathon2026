@@ -319,10 +319,12 @@ func serveCmd() *cobra.Command {
 const sampleConfig = `# 桌面安全沙箱配置（不含任何敏感值）
 allowlist:
   - api.anthropic.com
+  - api.openai.com
   - api.github.com
   - registry.npmjs.org
 
-# MCP server：跑在受限容器里（image 非空），密钥由宿主机 broker 注入到该容器。
+# MCP server：对 Claude Code 与 Codex 通用，均注册为指向 broker 的无密钥 HTTP 地址。
+# image 非空时，MCP server 跑在受限容器里，密钥由宿主机 broker 注入到该容器。
 mcpServers:
   github:
     image: "node:20-slim"
@@ -330,14 +332,19 @@ mcpServers:
     secrets:
       GITHUB_PERSONAL_ACCESS_TOKEN: gh-token
 
-# 凭据注入代理：让 agent 自身的模型 key 也不进沙箱。
-# 容器里只放占位 key，真实 key 由宿主机代理注入到上游请求头。
+# 凭据注入代理：让 agent 自身的模型 key 也不进沙箱（容器只放占位 key，真实 key 由代理注入）。
 llmProxies:
-  anthropic:
+  anthropic:                                     # Claude Code
     target: "https://api.anthropic.com"
     clientEnv:
-      ANTHROPIC_BASE_URL: "{proxy}"              # 替换为宿主机代理 URL
-      ANTHROPIC_API_KEY: "sandbox-placeholder"   # 占位，非真实密钥
+      ANTHROPIC_BASE_URL: "{proxy}"
+      ANTHROPIC_API_KEY: "sandbox-placeholder"
     headers:
-      x-api-key: anthropic-key                   # 注入真实 key（来自 Keychain）
+      x-api-key: anthropic-key
+  openai:                                        # Codex
+    target: "https://api.openai.com"
+    clientEnv:
+      OPENAI_API_KEY: "sandbox-placeholder"
+    headers:
+      Authorization: "Bearer ${openai-key}"
 `

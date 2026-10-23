@@ -7,13 +7,13 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 agent CLI（demo 以 Claude Code 为主；codex/dsh 可按需加装）。
-RUN npm install -g @anthropic-ai/claude-code || true
+# 安装 agent CLI（Claude Code + Codex）。
+RUN npm install -g @anthropic-ai/claude-code @openai/codex || true
 
 # 非 root 用户运行，配合 docker run 的 --user 10001:10001。
 RUN useradd -m -u 10001 agent
 ENV HOME=/home/agent
-RUN mkdir -p /home/agent/.claude && chown -R 10001:10001 /home/agent
+RUN mkdir -p /home/agent/.claude /home/agent/.codex && chown -R 10001:10001 /home/agent
 
 COPY docker/entrypoint.sh /usr/local/bin/sbx-entrypoint
 RUN chmod +x /usr/local/bin/sbx-entrypoint

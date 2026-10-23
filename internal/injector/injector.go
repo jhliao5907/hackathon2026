@@ -75,15 +75,17 @@ func (in *Injector) buildReverseProxy(e *entry) *httputil.ReverseProxy {
 			// 反代到真实上游时，Host 必须是上游主机名。
 			pr.Out.Host = e.target.Host
 
-			// 从 Keychain 取密钥，覆盖写入对应 header（覆盖容器里的占位值）。
-			for headerName, keyName := range e.headers {
-				val, err := in.store.Get(keyName)
+			// 从 Keychain 解析 header 值（支持 ${名} 模板），覆盖写入（覆盖容器里的占位值）。
+			for headerName, tmpl := range e.headers {
+				val, err := config.ResolveSecretTemplate(tmpl, in.store.Get)
 				if err != nil {
-					in.logger.Printf("注入 header %q 失败：密钥 %q 未就绪: %v", headerName, keyName, err)
+					in.logger.Printf("注入 header %q 失败：密钥未就绪: %v", headerName, err)
 					continue
 				}
 				pr.Out.Header.Set(headerName, val)
-				in.auditor.Secret(keyName, e.name)
+				for _, keyName := range config.SecretRefs(tmpl) {
+					in.auditor.Secret(keyName, e.name)
+				}
 			}
 			in.auditor.LLM(e.name, pr.Out.Method+" "+pr.Out.URL.Path)
 		},

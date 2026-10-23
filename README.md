@@ -116,6 +116,17 @@ tail -f sbx-audit.log       # JSONL：egress/mcp/llm/secret 事件
 > 唯一需要你本人完成的是让 Claude **真实产出回答**：填入你的 Anthropic key（`sbx secret set anthropic-key`）
 > 并在容器内首次登录。链路其余部分均已真机验证。
 
+## Agent 支持
+
+| Agent | MCP 零密钥接入 | 模型 key 不落沙箱 | 说明 |
+|---|---|---|---|
+| **Claude Code** | ✅ 已真机验证 | ✅ injector 注入 `x-api-key` | 容器内 `claude mcp add` 注册为 broker URL |
+| **Codex** | ✅ 配置已验证 | ✅ 自定义 provider + injector 注入 `Authorization: Bearer` | 容器内 `codex mcp add --url` 写入 `~/.codex/config.toml`（`url` 键即 Streamable HTTP，无密钥）；真实工具调用需 OpenAI key 发起 codex 会话 |
+| **dsh** | — | — | CLI 入口已预留，镜像与自动配置待接入具体目标后补齐 |
+
+> Codex 的 MCP 指向与 Claude Code 相同的 broker；broker 的 Streamable-HTTP 已被真实 MCP 客户端验证可用。
+> Codex 自 0.119 起忽略 `OPENAI_BASE_URL`，故改用 `~/.codex/config.toml` 自定义 provider 把模型请求导向注入代理。
+
 ## 测试
 
 ```bash

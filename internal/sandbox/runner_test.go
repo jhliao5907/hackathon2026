@@ -9,12 +9,13 @@ import (
 
 func TestBuildArgsHardening(t *testing.T) {
 	args, err := BuildArgs(Options{
-		Agent:       "claude",
-		Image:       "sbx-agent:latest",
-		Workdir:     "/home/u/proj",
-		BrokerPort:  8771,
-		GatewayPort: 8772,
-		MCPServers:  []string{"github"},
+		Agent:        "claude",
+		Image:        "sbx-agent:latest",
+		Workdir:      "/home/u/proj",
+		BrokerPort:   8771,
+		GatewayPort:  8772,
+		InjectorPort: 8773,
+		MCPServers:   []string{"github"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +34,9 @@ func TestBuildArgsHardening(t *testing.T) {
 		"--memory 2g",
 		"/home/u/proj:/workspace",
 		"HTTP_PROXY=http://host.docker.internal:8772",
+		"SBX_AGENT=claude",
 		"SBX_BROKER_BASE=http://host.docker.internal:8771",
+		"SBX_INJECTOR_BASE=http://host.docker.internal:8773",
 		"SBX_MCP_SERVERS=github",
 	} {
 		if !strings.Contains(joined, want) {

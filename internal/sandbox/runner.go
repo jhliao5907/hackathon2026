@@ -54,6 +54,7 @@ func BuildArgs(o Options) ([]string, error) {
 
 	proxy := fmt.Sprintf("http://%s:%d", hostAlias, o.GatewayPort)
 	brokerBase := fmt.Sprintf("http://%s:%d", hostAlias, o.BrokerPort)
+	injectorBase := fmt.Sprintf("http://%s:%d", hostAlias, o.InjectorPort)
 
 	args := []string{
 		"run", "--rm", "-it",
@@ -83,8 +84,10 @@ func BuildArgs(o Options) ([]string, error) {
 		// broker 自身要直连，不能被代理拦截
 		"-e", fmt.Sprintf("NO_PROXY=%s", hostAlias),
 		"-e", fmt.Sprintf("no_proxy=%s", hostAlias),
-		// —— 告知容器内启动脚本：每个 MCP server 的无密钥 URL ——
+		// —— 告知容器内启动脚本：agent 类型、broker 与 injector 的无密钥入口 ——
+		"-e", "SBX_AGENT=" + o.Agent,
 		"-e", "SBX_BROKER_BASE=" + brokerBase,
+		"-e", "SBX_INJECTOR_BASE=" + injectorBase,
 		"-e", "SBX_MCP_SERVERS=" + strings.Join(o.MCPServers, ","),
 	}
 

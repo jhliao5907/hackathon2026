@@ -47,7 +47,7 @@ token / password，使敏感信息散落在多处明文文件里。
 | P1 | 出网可控 | 默认拒绝，仅白名单域名放行 | 白名单内连通、白名单外被拦截并留痕 |
 | P1 | 可审计 | 关键行为全程留痕 | 出网 / MCP 调用 / 凭据注入均有结构化日志 |
 | P2 | 易用 | 终端用户操作最少 | 存一次密钥 + 一条命令启动 |
-| P2 | 多 agent | 支持主流 agent | 统一入口参数化启动 claude / codex / dsh |
+| P2 | 多 agent | 支持主流 agent | 统一入口参数化启动；Claude Code / Codex 均打通 MCP 零密钥接入 |
 
 **非目标**：不自研 agent 或大模型；不追求生产级多租户；当前原型聚焦单机单用户场景。
 
@@ -280,11 +280,17 @@ sbx serve                # 仅启动宿主机侧服务并阻塞（联调 / 解�
 `run` 的编排：密钥就绪检查 → 启动 broker / gateway / injector → 准备一次性工作区
 → `docker run` 容器 → 退出后 diff 审批回写。
 
-### 6.10 docker — agent 镜像
+### 6.10 docker — agent 镜像与多 agent 适配
 
-- 基础镜像安装 agent CLI，建非 root 用户 `agent(10001)`。
-- `entrypoint.sh`：按 `SBX_BROKER_BASE / SBX_MCP_SERVERS` 将每个 MCP server 注册为指向 broker 的
-  **无密钥 URL**（用户作用域，避免写入 `/workspace`）。
+- 基础镜像安装 Claude Code 与 Codex CLI，建非 root 用户 `agent(10001)`。
+- `entrypoint.sh` 按 `SBX_AGENT` 分支，将每个 MCP server 注册为指向 broker 的**无密钥 URL**：
+  - **Claude Code**：`claude mcp add --transport http <name> <url>`（用户作用域）。
+  - **Codex**：`codex mcp add <name> --url <url>`，写入 `~/.codex/config.toml` 的 `[mcp_servers.<name>] url=...`
+    （`url` 键即 Streamable HTTP）；并写一个自定义模型 provider，`base_url` 指向注入代理的 `/openai/v1`，
+    `wire_api=responses`、`env_key=OPENAI_API_KEY`（容器内仅占位值），使模型 key 也不落沙箱。
+- 两种 agent 的 MCP 都指向同一个 broker；凭据注入通过 injector 的 header 模板统一处理
+  （`x-api-key: <密钥名>` 或 `Authorization: "Bearer ${密钥名}"`）。
+- `dsh` 等其它 agent：CLI 入口已预留，接入具体目标后在此补齐镜像与注册逻辑。
 
 ---
 

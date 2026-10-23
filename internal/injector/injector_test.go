@@ -58,6 +58,39 @@ func TestInjectsHeaderAndStripsPrefix(t *testing.T) {
 	}
 }
 
+// TestInjectsBearerTemplate 验证 header 值模板 "Bearer ${openai-key}" 被正确解析注入。
+func TestInjectsBearerTemplate(t *testing.T) {
+	var gotAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+	}))
+	defer upstream.Close()
+
+	cfg := &config.Config{
+		LLMProxies: map[string]config.LLMProxy{
+			"openai": {
+				Target:  upstream.URL,
+				Headers: map[string]string{"Authorization": "Bearer ${openai-key}"},
+			},
+		},
+	}
+	in, _ := New(cfg, fakeSecrets{"openai-key": "sk-real"}, log.New(io.Discard, "", 0), nil)
+	srv := httptest.NewServer(in)
+	defer srv.Close()
+
+	req, _ := http.NewRequest("POST", srv.URL+"/openai/v1/responses", nil)
+	req.Header.Set("Authorization", "Bearer placeholder")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if gotAuth != "Bearer sk-real" {
+		t.Errorf("上游 Authorization = %q，期望 'Bearer sk-real'", gotAuth)
+	}
+}
+
 func TestUnknownProxy404(t *testing.T) {
 	cfg := &config.Config{LLMProxies: map[string]config.LLMProxy{}}
 	in, _ := New(cfg, fakeSecrets{}, log.New(io.Discard, "", 0), nil)
