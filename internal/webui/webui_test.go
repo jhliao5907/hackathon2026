@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -102,12 +103,46 @@ func TestLaunchScript(t *testing.T) {
 	got := launchScript("/Applications/My Tools/sbx", "/Users/me/proj dir", "codex")
 	for _, want := range []string{
 		"#!/bin/bash",
-		"cd '/Users/me/proj dir'", // 含空格路径被单引号包裹
-		"exec '/Applications/My Tools/sbx' run 'codex'",
+		"/opt/homebrew/bin",                       // 补全 PATH，docker 可被找到
+		"cd '/Users/me/proj dir'",                 // 含空格路径被单引号包裹
+		"'/Applications/My Tools/sbx' run 'codex'", // sbx 绝对路径运行
+		"read -n1",                                // 结束暂停，窗口不闪退
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("启动脚本缺少 %q\n实际:\n%s", want, got)
 		}
+	}
+}
+
+func TestAuditEndpoint(t *testing.T) {
+	s, _ := newServer(t)
+	// 写一个审计日志文件（含合法 JSONL + 一行噪声）。
+	s.AuditPath = filepath.Join(t.TempDir(), "sbx-audit.log")
+	content := `{"time":"2026-10-23T19:00:00+08:00","type":"egress","decision":"deny","host":"evil.com"}
+noise line
+{"time":"2026-10-23T19:00:01+08:00","type":"mcp","server":"github","method":"tools/call"}
+`
+	os.WriteFile(s.AuditPath, []byte(content), 0o644)
+
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/api/audit", nil))
+	var d struct {
+		Exists bool              `json:"exists"`
+		Events []json.RawMessage `json:"events"`
+	}
+	json.Unmarshal(rr.Body.Bytes(), &d)
+	if !d.Exists || len(d.Events) != 2 { // 噪声行被过滤
+		t.Fatalf("应返回 2 条事件，实际 exists=%v n=%d", d.Exists, len(d.Events))
+	}
+}
+
+func TestAuditEndpointNoFile(t *testing.T) {
+	s, _ := newServer(t)
+	s.AuditPath = filepath.Join(t.TempDir(), "nope.log")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/api/audit", nil))
+	if rr.Code != 200 || !strings.Contains(rr.Body.String(), `"exists":false`) {
+		t.Fatalf("无日志应返回 exists:false，实际: %s", rr.Body)
 	}
 }
 

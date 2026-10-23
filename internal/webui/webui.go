@@ -34,6 +34,15 @@ type Server struct {
 	Store      SecretStore
 	CfgPath    string // sandbox.yaml 路径
 	ProjectDir string // 启动 agent 时的工作目录
+	AuditPath  string // 审计日志路径（默认 <ProjectDir>/sbx-audit.log）
+}
+
+// auditPath 返回审计日志路径。
+func (s *Server) auditPath() string {
+	if s.AuditPath != "" {
+		return s.AuditPath
+	}
+	return filepath.Join(s.ProjectDir, "sbx-audit.log")
 }
 
 // Handler 组装路由。
@@ -51,7 +60,32 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/secret", s.handleSecret)
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/launch", s.handleLaunch)
+	mux.HandleFunc("/api/audit", s.handleAudit)
 	return mux
+}
+
+// ---- GET /api/audit：返回最近的审计事件（供实时查看）----
+
+func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
+	raw, err := os.ReadFile(s.auditPath())
+	if err != nil {
+		// 还没有日志（未跑过 run/serve）时返回空，不报错。
+		writeJSON(w, map[string]any{"events": []any{}, "exists": false})
+		return
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	const maxLines = 300
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	events := make([]json.RawMessage, 0, len(lines))
+	for _, ln := range lines {
+		ln = strings.TrimSpace(ln)
+		if strings.HasPrefix(ln, "{") {
+			events = append(events, json.RawMessage(ln))
+		}
+	}
+	writeJSON(w, map[string]any{"events": events, "exists": true})
 }
 
 // ---- GET /api/state：返回预设、当前选择、密钥就绪状态 ----
@@ -181,11 +215,17 @@ func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request) {
 }
 
 // launchScript 生成一个可执行的 .command 脚本内容：进入项目目录并运行 agent。
-// 用 sbx 的绝对路径，避免依赖 PATH；用单引号包裹避免路径含空格/特殊字符时出错。
+// 要点：
+//   - 补全 PATH（iTerm/Terminal 以非登录 shell 运行脚本，默认 PATH 不含 Homebrew，
+//     会导致 sbx 内部调用的 docker 找不到、瞬间退出、窗口自动关闭）。
+//   - 结束时 read 暂停，让 agent 退出或报错后窗口仍可见。
+//   - sbx 用绝对路径；路径均单引号包裹，容忍空格/特殊字符。
 func launchScript(exe, dir, agent string) string {
 	return "#!/bin/bash\n" +
-		"cd " + shellSingleQuote(dir) + " || exit 1\n" +
-		"exec " + shellSingleQuote(exe) + " run " + shellSingleQuote(agent) + "\n"
+		`export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"` + "\n" +
+		"cd " + shellSingleQuote(dir) + " || { echo '目录不存在: '" + shellSingleQuote(dir) + "; read -n1 -r; exit 1; }\n" +
+		shellSingleQuote(exe) + " run " + shellSingleQuote(agent) + "\n" +
+		"echo; echo '（沙箱已退出，按任意键关闭窗口）'; read -n1 -r\n"
 }
 
 // openTerminal 把启动脚本写成 .command 文件并用 `open` 在终端里打开（macOS）。

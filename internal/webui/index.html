@@ -40,6 +40,16 @@
   .launch{background:var(--ok);font-size:15px;padding:11px 22px}
   #status{margin-top:12px;font-size:13px;white-space:pre-wrap;color:var(--mut)}
   code{background:#0e1016;border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+  .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+  .tab{padding:8px 16px;cursor:pointer;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab.sel{color:var(--fg);border-bottom-color:var(--accent)}
+  .auditlist{font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:60vh;overflow:auto}
+  .ev{display:flex;gap:10px;padding:3px 0;border-bottom:1px solid #1e2129;white-space:nowrap}
+  .ev .t{color:var(--mut)}
+  .ev .k{min-width:62px;font-weight:600}
+  .ev.egress .k{color:#5b8cff}.ev.mcp .k{color:#38c172}.ev.llm .k{color:#c48cff}.ev.secret .k{color:#e0a106}
+  .ev .d{color:var(--fg);white-space:normal;word-break:break-all}
+  .allowT{color:#38c172}.denyT{color:#e5534b}
 </style>
 </head>
 <body>
@@ -47,6 +57,12 @@
   <h1>sbx 安全沙箱</h1>
   <p class="sub">勾选要用的能力、填入密钥，一键在隔离沙箱里启动 AI agent。密钥只存在本机系统钥匙串，绝不进入沙箱。</p>
 
+  <div class="tabs">
+    <span class="tab sel" data-view="config">配置</span>
+    <span class="tab" data-view="audit">审计日志</span>
+  </div>
+
+  <div id="view-config">
   <div class="card">
     <h2>选择 AGENT</h2>
     <div id="agents" class="row"></div>
@@ -81,6 +97,18 @@
     <button class="launch" id="launch">启动沙箱 ▶</button>
   </div>
   <div id="status"></div>
+  </div><!-- /view-config -->
+
+  <div id="view-audit" hidden>
+    <div class="card">
+      <h2 style="display:flex;align-items:center;gap:12px">审计日志（实时）
+        <label class="opt" style="font-weight:400;font-size:12px"><input type="checkbox" id="autoref" checked> 自动刷新</label>
+        <button class="ghost" id="refresh" style="padding:4px 10px;font-size:12px">刷新</button>
+        <span id="auditInfo" class="desc" style="font-size:12px;margin-left:auto"></span>
+      </h2>
+      <div id="auditList" class="auditlist"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -169,6 +197,41 @@ async function launch(){
   else status('未能自动打开终端'+(d.error?'（'+d.error+'）':'')+'。请手动在终端运行：\n  '+d.command,'var(--warn)');
 }
 
+// ---- 审计日志页 ----
+let auditTimer = null;
+function fmtEvent(e){
+  const row = el('div',{class:'ev '+(e.type||'')});
+  row.append(el('span',{class:'t'}, (e.time||'').replace('T',' ').replace(/\+.*/,'')));
+  row.append(el('span',{class:'k'}, e.type||'?'));
+  let d='';
+  if(e.type==='egress') d = `<span class="${e.decision==='allow'?'allowT':'denyT'}">${e.decision.toUpperCase()}</span> ${e.method||''} ${e.host||''}`;
+  else if(e.type==='mcp') d = `${e.server||''} · ${e.method||''}${e.rpc_id?(' #'+e.rpc_id):''}`;
+  else if(e.type==='llm') d = `${e.server||''} · ${e.detail||''}`;
+  else if(e.type==='secret') d = `注入密钥 ${e.secret||''}${e.server?(' → '+e.server):''}`;
+  else d = JSON.stringify(e);
+  row.append(el('span',{class:'d',html:d}));
+  return row;
+}
+async function loadAudit(){
+  try{
+    const d = await (await fetch('/api/audit')).json();
+    const box = $('#auditList'); box.innerHTML='';
+    if(!d.exists){ $('#auditInfo').textContent='暂无日志（启动沙箱后产生）'; return; }
+    const evs = (d.events||[]).map(x=>typeof x==='string'?JSON.parse(x):x);
+    $('#auditInfo').textContent = evs.length+' 条';
+    evs.forEach(e=>box.append(fmtEvent(e)));
+    box.scrollTop = box.scrollHeight;
+  }catch(e){ $('#auditInfo').textContent='读取失败'; }
+}
+function switchView(v){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('sel', t.dataset.view===v));
+  $('#view-config').hidden = v!=='audit' ? false : true;
+  $('#view-audit').hidden = v!=='audit';
+  if(v==='audit'){ loadAudit(); startAuto(); } else { stopAuto(); }
+}
+function startAuto(){ stopAuto(); if($('#autoref').checked) auditTimer=setInterval(loadAudit,1500); }
+function stopAuto(){ if(auditTimer){ clearInterval(auditTimer); auditTimer=null; } }
+
 async function init(){
   S = await (await fetch('/api/state')).json();
   agent = S.selected.agent || S.agents[0].key;
@@ -178,6 +241,10 @@ async function init(){
   renderAgents(); renderAgentSecret(); renderMCPs(); renderAllow();
   $('#save').onclick = save;
   $('#launch').onclick = launch;
+  document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>switchView(t.dataset.view));
+  $('#refresh').onclick = loadAudit;
+  $('#autoref').onchange = startAuto;
+  if(location.hash==='#audit') switchView('audit');
 }
 init();
 </script>

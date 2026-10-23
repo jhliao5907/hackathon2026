@@ -81,9 +81,14 @@ PID 与日志写入 `.sbx-run/`（已 gitignore）。
 ./sbx ui        # 本机浏览器打开 http://127.0.0.1:8780（或用上面的 sbxctl start）
 ```
 
-界面内可：选择 agent（Claude/Codex）、勾选 MCP 服务（GitHub/文件系统/网页抓取…）、
-为需要的服务填密钥（存入系统钥匙串、不进沙箱）、查看自动汇总的出网白名单、保存配置并一键启动。
-全程无需手写 `sandbox.yaml`，也无需知道 npx 命令、docker 镜像、代理 header 等技术细节。
+界面内可：选择 agent（Claude/Codex）、设置模型服务地址（支持自建/第三方 OpenAI 兼容网关）、
+勾选 MCP 服务（GitHub/文件系统/网页抓取…）、为需要的服务填密钥（存入系统钥匙串、不进沙箱）、
+查看自动汇总的出网白名单、保存配置并一键启动。全程无需手写 `sandbox.yaml`，也无需知道
+npx 命令、docker 镜像、代理 header 等技术细节。
+
+「审计日志」标签页可**实时查看**沙箱的全部行为（出网放行/拦截、MCP 调用、模型调用、凭据注入）：
+
+<p align="center"><img src="docs/ui-audit.png" alt="审计日志页" width="520"></p>
 
 > 密钥只写入本机系统钥匙串；界面仅监听 `127.0.0.1`。启动按钮会拉起一个终端窗口运行 agent（TUI）。
 
