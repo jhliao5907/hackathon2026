@@ -3,6 +3,11 @@
 在隔离的 Docker 容器里运行主流 AI agent（Claude Code / Codex / dsh），
 **配置任何 MCP 时都无需在沙箱内填写任何密钥**。
 
+<p align="center">
+  <img src="docs/ui.png" alt="sbx 图形配置界面" width="520">
+  <br><em>图形配置界面（<code>sbx ui</code>）：勾选 MCP、填密钥、一键启动，无需手写配置</em>
+</p>
+
 核心机制一句话：
 
 > agent 在隔离容器里，MCP 配置只指向宿主机 **broker** 的本地 URL（零密钥）；
