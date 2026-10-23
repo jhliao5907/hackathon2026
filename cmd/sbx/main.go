@@ -395,8 +395,8 @@ allowlist:
 # image 非空时，MCP server 跑在受限容器里，密钥由宿主机 broker 注入到该容器。
 mcpServers:
   github:
-    image: "node:20-slim"
-    command: ["npx", "-y", "@modelcontextprotocol/server-github"]
+    image: "ghcr.io/github/github-mcp-server:latest"
+    command: ["stdio"]
     secrets:
       GITHUB_PERSONAL_ACCESS_TOKEN: gh-token
 

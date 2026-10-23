@@ -39,8 +39,9 @@ func MCPPresets() []MCPPreset {
 	return []MCPPreset{
 		{
 			Key: "github", Display: "GitHub", Desc: "读写 GitHub 仓库 / issue / PR",
-			Image:   "node:20-slim",
-			Command: []string{"npx", "-y", "@modelcontextprotocol/server-github"},
+			// GitHub 官方维护的 MCP server（Go 版，stdio 模式）。
+			Image:   "ghcr.io/github/github-mcp-server:latest",
+			Command: []string{"stdio"},
 			Secrets: []SecretField{{
 				Env: "GITHUB_PERSONAL_ACCESS_TOKEN", KeyName: "gh-token", Label: "GitHub 访问令牌",
 			}},
