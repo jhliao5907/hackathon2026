@@ -1,7 +1,7 @@
 # 本文件由 sbx 生成，不含任何敏感值（密钥存于系统 Keychain）。
 allowlist:
+    - api.fenno.ai
     - api.github.com
-    - llmapi.qiniu.io
     - registry.npmjs.org
 mcpServers:
     github:
@@ -11,9 +11,10 @@ mcpServers:
         secrets:
             GITHUB_PERSONAL_ACCESS_TOKEN: gh-token
 llmProxies:
-    openai:
-        target: https://llmapi.qiniu.io
+    anthropic:
+        target: https://api.fenno.ai
         clientEnv:
-            OPENAI_API_KEY: sandbox-placeholder
+            ANTHROPIC_API_KEY: sandbox-placeholder
+            ANTHROPIC_BASE_URL: '{proxy}'
         headers:
-            Authorization: Bearer ${openai-key}
+            x-api-key: anthropic-key

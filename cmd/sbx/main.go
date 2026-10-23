@@ -24,6 +24,7 @@ import (
 
 	"sbx/internal/audit"
 	"sbx/internal/broker"
+	"sbx/internal/catalog"
 	"sbx/internal/config"
 	"sbx/internal/gateway"
 	"sbx/internal/injector"
@@ -160,6 +161,15 @@ func runCmd() *cobra.Command {
 				return err
 			}
 			store := secrets.New()
+
+			// 配置与 agent 匹配性校验：避免拿为其它 agent 生成的配置来跑，
+			// 否则会出现 agent 直连模型域名被网关拦截的费解错误（如 ERR_SOCKET_CLOSED）。
+			if ap, ok := catalog.AgentByKey(agent); ok {
+				if _, has := cfg.LLMProxies[ap.ProxyName]; !has {
+					return fmt.Errorf("当前 sandbox.yaml 未配置 %s 的模型代理（看起来是为其它 agent 生成的）。\n"+
+						"请在 `sbx ui` 里选择「%s」并保存配置后再启动，或改跑与配置匹配的 agent。", agent, ap.Display)
+				}
+			}
 
 			// 启动前检查：所有被引用的密钥是否已就绪。
 			var missing []string
