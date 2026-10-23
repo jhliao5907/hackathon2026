@@ -45,12 +45,28 @@ internal/gateway/     出网白名单正向代理（deny-by-default）
 internal/audit/       结构化审计日志（JSONL）
 internal/workspace/   一次性工作区：快照 / diff / 审批回写
 internal/sandbox/     组装 docker run 启动隔离容器（只读 rootfs + 资源上限）
+internal/catalog/     预设目录：常见 MCP server + agent 代理（供 GUI 勾选生成配置）
+internal/webui/       本地图形配置界面（单页 Web + JSON API，go:embed）
 docker/               agent 容器镜像 + 启动脚本
 ```
 
 宿主机侧启动三个服务：broker `:8771`、出网网关 `:8772`、凭据注入代理 `:8773`，审计写入 `./sbx-audit.log`。
 
-## 快速开始
+## 图形界面（推荐给最终用户）
+
+不想碰配置文件？一条命令打开图形界面，勾选 MCP、填密钥、一键启动：
+
+```bash
+./sbx ui        # 本机浏览器打开 http://127.0.0.1:8780
+```
+
+界面内可：选择 agent（Claude/Codex）、勾选 MCP 服务（GitHub/文件系统/网页抓取…）、
+为需要的服务填密钥（存入系统钥匙串、不进沙箱）、查看自动汇总的出网白名单、保存配置并一键启动。
+全程无需手写 `sandbox.yaml`，也无需知道 npx 命令、docker 镜像、代理 header 等技术细节。
+
+> 密钥只写入本机系统钥匙串；界面仅监听 `127.0.0.1`。启动按钮会拉起一个终端窗口运行 agent（TUI）。
+
+## 命令行用法
 
 前置：已安装 Docker、Go 1.21+。
 

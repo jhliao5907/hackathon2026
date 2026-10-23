@@ -42,6 +42,9 @@ go build ./... && go vet ./... && go test ./...
 | `sandbox` | `BuildArgs` 加固断言 / 未知 agent / LLM 代理 env | docker run 参数、无密钥泄露、注入占位 key |
 | `audit` | JSONL 合法/判定/不记值 / nil 安全 | 审计格式与「只记名不记值」 |
 | `workspace` | 改/增/删 → Diff → Apply | 一次性工作区回写正确性 |
+| `catalog` | `BuildConfig` / `RequiredSecretNames` | 预设→配置生成、白名单去重、所需密钥汇总 |
+| `webui` | `/api/state` `/api/config` `/api/launch` `/` | 预设下发、生成可加载 yaml、缺密钥提示、首页返回 |
+| `config` | `Save` 往返 | GUI 生成的配置能被 `Load` 读回 |
 
 ---
 
@@ -116,7 +119,17 @@ go build ./... && go vet ./... && go test ./...
 | F2 | 覆盖四类事件 | 全链路后查看 | egress/mcp/llm/secret | 四类均出现 | ✅ |
 | F3 | 不记密钥值 | 检查 secret 事件 | 只记名字 | 仅 `"secret":"openai-key"`，无值 | ✅ |
 
-### 3.7 一次性工作区 + diff 审批
+### 3.7 图形配置界面（友好性）
+
+| # | check 点 | 方法 | 预期 | 实际结果 | 结论 |
+|---|---|---|---|---|---|
+| H1 | 界面启动 | `sbx ui --port 8785` | 本机监听、返回首页 | 服务起、`GET /` 返回含「sbx 安全沙箱」的页面 | ✅ |
+| H2 | 预设下发 | `GET /api/state` | 返回 agents/MCP 预设/密钥状态 | agents=[claude,codex]、MCP=[github,filesystem,fetch]、secrets 状态齐全 | ✅ |
+| H3 | 勾选生成配置 | `POST /api/config` claude+github+filesystem | 写出合法无密钥 yaml | 生成的 `sandbox.yaml` 含两 MCP + anthropic 代理 + 汇总白名单，仅密钥名无值 | ✅ |
+| H4 | 配置可被消费 | `config.Load` 读回生成文件 | 成功且字段正确 | 单测通过（webui 生成 → Load 读回一致） | ✅ |
+| H5 | 缺密钥提示 | `POST /api/launch` 未设密钥 | 报告缺失项 | 返回 `ok:false, missing:[gh-token, openai-key]` | ✅ |
+
+### 3.8 一次性工作区 + diff 审批
 
 | # | check 点 | 方法 | 预期 | 实际结果 | 结论 |
 |---|---|---|---|---|---|

@@ -72,6 +72,36 @@ func TestSecretRefsAndResolve(t *testing.T) {
 	}
 }
 
+func TestSaveRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sandbox.yaml")
+	in := &Config{
+		Allowlist: []string{"api.github.com", "api.anthropic.com"},
+		MCPServers: map[string]MCPServer{
+			"github": {Image: "node:20-slim", Command: []string{"npx", "srv"}, Secrets: map[string]string{"TOKEN": "gh-token"}},
+		},
+		LLMProxies: map[string]LLMProxy{
+			"anthropic": {Target: "https://api.anthropic.com", Headers: map[string]string{"x-api-key": "anthropic-key"}},
+		},
+	}
+	if err := Save(path, in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := Load(path)
+	if err != nil {
+		t.Fatalf("写出的配置无法读回: %v", err)
+	}
+	if len(out.MCPServers) != 1 || out.MCPServers["github"].Image != "node:20-slim" {
+		t.Errorf("MCP 往返不一致: %+v", out.MCPServers)
+	}
+	if out.MCPServers["github"].Secrets["TOKEN"] != "gh-token" {
+		t.Errorf("密钥名往返丢失: %+v", out.MCPServers["github"].Secrets)
+	}
+	if out.LLMProxies["anthropic"].Headers["x-api-key"] != "anthropic-key" {
+		t.Errorf("代理往返不一致: %+v", out.LLMProxies)
+	}
+}
+
 func TestLoadMissingCommand(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.yaml")

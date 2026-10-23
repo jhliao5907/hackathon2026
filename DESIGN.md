@@ -172,8 +172,18 @@ internal/gateway/        出网白名单正向代理（deny-by-default）
 internal/audit/          结构化审计日志（JSONL）
 internal/workspace/      一次性工作区：快照 / diff / 审批回写
 internal/sandbox/        组装 docker run 启动隔离容器（加固）
+internal/catalog/        预设目录 + 配置生成（供 GUI）
+internal/webui/          本地图形配置界面（单页 Web + JSON API）
 docker/                  agent 容器镜像 + 启动脚本
 ```
+
+### 6.11 catalog + webui — 图形配置界面（友好性）
+
+为「最终用户友好、不要太技术化配置」而设：把常见 MCP server 与各 agent 的模型代理收进
+`internal/catalog` 预设目录（技术细节的单一事实源），再由 `internal/webui` 提供一个仅监听
+`127.0.0.1` 的单页界面。用户勾选 MCP、填密钥（存入系统钥匙串）、点启动即可，`catalog.BuildConfig`
+自动生成 `sandbox.yaml`（汇总白名单、写入 MCP 与代理、仅含密钥名）。页面经 `//go:embed` 内嵌进二进制，
+`sbx ui` 一条命令打开。启动按钮拉起终端运行既有的 `sbx run`，不重复管理宿主机服务。
 
 ### 6.1 config — 配置（无敏感信息）
 
@@ -277,6 +287,7 @@ sbx secret set gh-token  # 交互式存密钥到系统密钥库（不回显）
 sbx secret list|rm       # 查看引用密钥是否就绪 / 删除
 sbx run claude           # 启动宿主机侧服务，再拉起隔离容器运行 agent
 sbx serve                # 仅启动宿主机侧服务并阻塞（联调 / 解耦用）
+sbx ui                   # 打开图形配置界面（本机浏览器，勾选即配置、一键启动）
 ```
 
 `run` 的编排：密钥就绪检查 → 启动 broker / gateway / injector → 准备一次性工作区

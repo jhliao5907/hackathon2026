@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sbx 安全沙箱</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#1a1d24; --line:#2a2f3a; --fg:#e6e8ec; --mut:#9aa3b2;
+    --accent:#5b8cff; --ok:#38c172; --warn:#e0a106; --danger:#e5534b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft Yahei",sans-serif}
+  .wrap{max-width:720px;margin:32px auto;padding:0 16px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--mut);margin:0 0 24px;font-size:13px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+  .card h2{font-size:14px;margin:0 0 14px;color:var(--mut);font-weight:600;letter-spacing:.3px}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  label.opt{display:flex;align-items:center;gap:8px;cursor:pointer}
+  .agent{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--line);border-radius:999px;cursor:pointer;margin-right:10px}
+  .agent.sel{border-color:var(--accent);background:rgba(91,140,255,.12)}
+  .mcp{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+  .mcp .top{display:flex;align-items:flex-start;gap:10px}
+  .mcp .meta{flex:1}
+  .mcp .name{font-weight:600}
+  .mcp .desc{color:var(--mut);font-size:13px}
+  .secret{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .secret .lbl{min-width:120px;color:var(--mut);font-size:13px}
+  input[type=password],input[type=text]{background:#0e1016;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:7px 10px;flex:1;min-width:160px}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:14px}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .badge{font-size:12px;padding:2px 8px;border-radius:999px}
+  .badge.ok{background:rgba(56,193,114,.15);color:var(--ok)}
+  .badge.no{background:rgba(224,161,6,.15);color:var(--warn)}
+  .allow{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:12px;background:#0e1016;border:1px solid var(--line);border-radius:6px;padding:3px 8px;color:var(--mut)}
+  .actions{display:flex;gap:12px;align-items:center;margin-top:8px}
+  .launch{background:var(--ok);font-size:15px;padding:11px 22px}
+  #status{margin-top:12px;font-size:13px;white-space:pre-wrap;color:var(--mut)}
+  code{background:#0e1016;border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>sbx 安全沙箱</h1>
+  <p class="sub">勾选要用的能力、填入密钥，一键在隔离沙箱里启动 AI agent。密钥只存在本机系统钥匙串，绝不进入沙箱。</p>
+
+  <div class="card">
+    <h2>选择 AGENT</h2>
+    <div id="agents" class="row"></div>
+  </div>
+
+  <div class="card">
+    <h2>模型密钥（不进沙箱，由宿主机注入）</h2>
+    <div id="agentSecret"></div>
+  </div>
+
+  <div class="card">
+    <h2>MCP 服务</h2>
+    <div id="mcps"></div>
+  </div>
+
+  <div class="card">
+    <h2>出网白名单（按所选自动汇总，其余一律拒绝）</h2>
+    <div id="allow" class="allow"></div>
+  </div>
+
+  <div class="actions">
+    <button class="ghost" id="save">保存配置</button>
+    <button class="launch" id="launch">启动沙箱 ▶</button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<script>
+let S = null;              // 服务端状态
+let agent = null;          // 当前 agent key
+const enabled = new Set(); // 启用的 MCP key
+
+const $ = s => document.querySelector(s);
+const el = (t, props={}, kids=[]) => {
+  const n = document.createElement(t);
+  Object.entries(props).forEach(([k,v]) => k==='class'?n.className=v:k==='html'?n.innerHTML=v:n.setAttribute(k,v));
+  (Array.isArray(kids)?kids:[kids]).forEach(c=>c&&n.append(c));
+  return n;
+};
+const status = (msg, color) => { const s=$('#status'); s.textContent=msg; s.style.color=color||'var(--mut)'; };
+
+function badge(set){ return el('span',{class:'badge '+(set?'ok':'no'), html:set?'已设置':'未设置'}); }
+
+function secretRow(keyName, label){
+  const b = badge(S.secrets[keyName]);
+  const inp = el('input',{type:'password',placeholder:'粘贴 '+label+'，留空则不改动'});
+  const btn = el('button',{},'保存密钥');
+  btn.onclick = async () => {
+    if(!inp.value){ status('请输入 '+label,'var(--warn)'); return; }
+    btn.disabled=true;
+    const r = await fetch('/api/secret',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:keyName,value:inp.value})});
+    btn.disabled=false;
+    if(r.ok){ S.secrets[keyName]=true; b.className='badge ok'; b.textContent='已设置'; inp.value=''; status('已存入钥匙串：'+keyName,'var(--ok)'); }
+    else status('保存失败','var(--danger)');
+  };
+  return el('div',{class:'secret'},[el('span',{class:'lbl'},label), b, inp, btn]);
+}
+
+function renderAgentSecret(){
+  const box = $('#agentSecret'); box.innerHTML='';
+  (S.agentSecrets[agent]||[]).forEach(name => box.append(secretRow(name, name)));
+  if(!(S.agentSecrets[agent]||[]).length) box.append(el('div',{class:'desc'},'该 agent 无需额外模型密钥'));
+}
+
+function renderAgents(){
+  const box = $('#agents'); box.innerHTML='';
+  S.agents.forEach(a => {
+    const node = el('span',{class:'agent'+(a.key===agent?' sel':'')}, a.display);
+    node.onclick = () => { agent=a.key; renderAgents(); renderAgentSecret(); renderAllow(); };
+    box.append(node);
+  });
+}
+
+function renderMCPs(){
+  const box = $('#mcps'); box.innerHTML='';
+  S.mcpPresets.forEach(p => {
+    const cb = el('input',{type:'checkbox'}); cb.checked=enabled.has(p.key);
+    cb.onchange = () => { cb.checked?enabled.add(p.key):enabled.delete(p.key); renderAllow(); };
+    const top = el('div',{class:'top'},[cb, el('div',{class:'meta'},[
+      el('div',{class:'name'},p.display), el('div',{class:'desc'},p.desc)
+    ])]);
+    const card = el('div',{class:'mcp'},[top]);
+    (p.secrets||[]).forEach(s => card.append(secretRow(s.keyName, s.label)));
+    box.append(card);
+  });
+}
+
+function renderAllow(){
+  const box = $('#allow'); box.innerHTML='';
+  const set = new Set(['registry.npmjs.org']);
+  const a = S.agents.find(x=>x.key===agent); (a&&a.allowlist||[]).forEach(d=>set.add(d));
+  S.mcpPresets.filter(p=>enabled.has(p.key)).forEach(p=>(p.allowlist||[]).forEach(d=>set.add(d)));
+  [...set].sort().forEach(d=>box.append(el('span',{class:'chip'},d)));
+}
+
+async function save(){
+  const r = await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent,enabled:[...enabled]})});
+  if(r.ok){ status('已生成 sandbox.yaml（不含任何密钥）','var(--ok)'); return true; }
+  status('保存配置失败','var(--danger)'); return false;
+}
+
+async function launch(){
+  if(!await save()) return;
+  const r = await fetch('/api/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent,enabled:[...enabled]})});
+  const d = await r.json();
+  if(!d.ok){ status('以下密钥尚未设置，请先填写：'+d.missing.join('、'),'var(--warn)'); return; }
+  if(d.launched) status('已在新终端窗口启动沙箱 ✓  运行：'+d.command,'var(--ok)');
+  else status('配置就绪。请在终端运行：\n  '+d.command,'var(--fg)');
+}
+
+async function init(){
+  S = await (await fetch('/api/state')).json();
+  agent = S.selected.agent || S.agents[0].key;
+  (S.selected.enabled||[]).forEach(k=>enabled.add(k));
+  renderAgents(); renderAgentSecret(); renderMCPs(); renderAllow();
+  $('#save').onclick = save;
+  $('#launch').onclick = launch;
+}
+init();
+</script>
+</body>
+</html>

@@ -70,6 +70,20 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// Save 把配置序列化为 YAML 写入 path（供 GUI 生成配置复用）。
+// 注意：Config 本身不含任何密钥值，落盘的只是密钥名与白名单等非敏感信息。
+func Save(path string, c *Config) error {
+	raw, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("序列化配置失败: %w", err)
+	}
+	header := []byte("# 本文件由 sbx 生成，不含任何敏感值（密钥存于系统 Keychain）。\n")
+	if err := os.WriteFile(path, append(header, raw...), 0o644); err != nil {
+		return fmt.Errorf("写入配置 %s 失败: %w", path, err)
+	}
+	return nil
+}
+
 func (c *Config) validate() error {
 	for name, s := range c.MCPServers {
 		if len(s.Command) == 0 {

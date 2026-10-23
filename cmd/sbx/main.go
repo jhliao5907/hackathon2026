@@ -13,7 +13,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"sbx/internal/injector"
 	"sbx/internal/sandbox"
 	"sbx/internal/secrets"
+	"sbx/internal/webui"
 	"sbx/internal/workspace"
 )
 
@@ -44,7 +47,7 @@ func main() {
 		Use:   "sbx",
 		Short: "桌面级安全沙箱：隔离运行 AI agent，密钥不落沙箱",
 	}
-	root.AddCommand(initCmd(), secretCmd(), runCmd(), serveCmd())
+	root.AddCommand(initCmd(), secretCmd(), runCmd(), serveCmd(), uiCmd())
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "错误:", err)
 		os.Exit(1)
@@ -304,6 +307,49 @@ func startHostServices(cfg *config.Config, store *secrets.Store, logger *log.Log
 		auditor.Close()
 	}
 	return auditor, cleanup, nil
+}
+
+// ---- sbx ui ----
+
+func uiCmd() *cobra.Command {
+	var port int
+	var noOpen bool
+	c := &cobra.Command{
+		Use:   "ui",
+		Short: "打开图形配置界面（本机浏览器，勾选即配置、一键启动）",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, _ := os.Getwd()
+			srv := &webui.Server{
+				Store:      secrets.New(),
+				CfgPath:    defaultConfig,
+				ProjectDir: wd,
+			}
+			addr := fmt.Sprintf("127.0.0.1:%d", port)
+			url := "http://" + addr
+			fmt.Printf("配置界面已启动：%s （Ctrl-C 退出）\n", url)
+			if !noOpen {
+				openBrowser(url)
+			}
+			return http.ListenAndServe(addr, srv.Handler())
+		},
+	}
+	c.Flags().IntVar(&port, "port", 8780, "监听端口（仅 127.0.0.1）")
+	c.Flags().BoolVar(&noOpen, "no-open", false, "不自动打开浏览器")
+	return c
+}
+
+// openBrowser 用系统默认方式打开 URL（失败则忽略，用户可手动访问）。
+func openBrowser(url string) {
+	var c *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		c = exec.Command("open", url)
+	case "windows":
+		c = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		c = exec.Command("xdg-open", url)
+	}
+	_ = c.Start()
 }
 
 // ---- sbx serve ----
