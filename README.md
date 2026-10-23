@@ -64,6 +64,8 @@ docker build -f docker/Dockerfile.agent -t sbx-agent:latest .
 
 # 2) 把密钥存入系统 Keychain（一次即可，输入不回显）
 ./sbx secret set gh-token
+# 也支持非交互导入（值从 stdin 读，不进命令行参数）：
+#   printf '%s' "$TOKEN" | ./sbx secret set gh-token
 
 # 3) 在隔离沙箱里启动 Claude Code
 ./sbx run claude      # 或 ./sbx run codex / ./sbx run dsh
@@ -121,11 +123,12 @@ tail -f sbx-audit.log       # JSONL：egress/mcp/llm/secret 事件
 | Agent | MCP 零密钥接入 | 模型 key 不落沙箱 | 说明 |
 |---|---|---|---|
 | **Claude Code** | ✅ 已真机验证 | ✅ injector 注入 `x-api-key` | 容器内 `claude mcp add` 注册为 broker URL |
-| **Codex** | ✅ 配置已验证 | ✅ 自定义 provider + injector 注入 `Authorization: Bearer` | 容器内 `codex mcp add --url` 写入 `~/.codex/config.toml`（`url` 键即 Streamable HTTP，无密钥）；真实工具调用需 OpenAI key 发起 codex 会话 |
+| **Codex** | ✅ 已真机验证 | ✅ 已真机验证（含真实模型调用） | 容器内 `codex mcp add --url` 写入 `~/.codex/config.toml`；自定义 provider 把模型请求经注入代理转发，容器内仅占位 key |
 | **dsh** | — | — | CLI 入口已预留，镜像与自动配置待接入具体目标后补齐 |
 
-> Codex 的 MCP 指向与 Claude Code 相同的 broker；broker 的 Streamable-HTTP 已被真实 MCP 客户端验证可用。
 > Codex 自 0.119 起忽略 `OPENAI_BASE_URL`，故改用 `~/.codex/config.toml` 自定义 provider 把模型请求导向注入代理。
+> 已验证：容器内 Codex 以 `OPENAI_API_KEY=占位值` 发起 `codex exec`，injector 在宿主机注入真实 key 后转发
+> 上游（OpenAI 兼容网关），模型正常返回；真实 key 全程不在容器内。
 
 ## 测试
 

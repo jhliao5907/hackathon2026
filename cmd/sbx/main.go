@@ -9,10 +9,12 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -79,13 +81,24 @@ func secretCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			fmt.Printf("请输入密钥 %q 的值（输入不回显）: ", name)
-			b, err := term.ReadPassword(int(os.Stdin.Fd()))
-			fmt.Println()
-			if err != nil {
-				return err
+			var val string
+			if term.IsTerminal(int(os.Stdin.Fd())) {
+				fmt.Printf("请输入密钥 %q 的值（输入不回显）: ", name)
+				b, err := term.ReadPassword(int(os.Stdin.Fd()))
+				fmt.Println()
+				if err != nil {
+					return err
+				}
+				val = string(b)
+			} else {
+				// 非交互：从 stdin 读取（便于脚本/管道导入，值不进 argv）。
+				b, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					return err
+				}
+				val = strings.TrimRight(string(b), "\r\n")
 			}
-			if err := secrets.New().Set(name, string(b)); err != nil {
+			if err := secrets.New().Set(name, val); err != nil {
 				return err
 			}
 			fmt.Printf("已存入 Keychain：%s（沙箱与配置文件都不会看到它的值）\n", name)

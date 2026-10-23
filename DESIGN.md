@@ -366,10 +366,11 @@ agent → POST http://host:8773/anthropic/v1/messages（带占位 key）
 | 一次性工作区 | 改/增/删后 Diff 检出、审批前原目录不变、Apply 正确回写 | ✅ 单测 |
 | 配置解析 / 去重 | YAML 解析 + SecretNames 去重 | ✅ 单测 |
 
-**端到端联调（真机）**：在 macOS + Docker 上，用一个无需密钥的 MCP server 跑通整条链路：
+**端到端联调（真机）**：在 macOS + Docker 上跑通整条链路：
 镜像非 root、只读 rootfs、能力全丢；broker 真实拉起 MCP server 容器并返回工具列表；
-出网白名单实弹放行/拦截；agent 侧 `mcp list` 显示连接成功且配置中只有 broker URL；
-容器看不到宿主机文件；审计日志完整记录。
+出网白名单实弹放行/拦截；agent 侧配置中只有 broker URL；容器看不到宿主机文件；审计日志完整记录。
+其中 **Codex 全链路已用真实凭据验证**：容器内 Codex 仅持占位 key 发起 `codex exec`，
+injector 在宿主机注入真实 key 后转发 OpenAI 兼容上游，模型正常返回，真实 key 全程不在容器内。
 
 ```bash
 go test ./...   # 全绿
