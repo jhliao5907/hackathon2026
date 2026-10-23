@@ -28,8 +28,10 @@ type AgentPreset struct {
 	Key       string          `json:"key"`
 	Display   string          `json:"display"`
 	ProxyName string          `json:"-"`
-	Proxy     config.LLMProxy `json:"-"`
-	Allowlist []string        `json:"allowlist"`
+	Proxy     config.LLMProxy `json:"-"` // 不含 Target，Target 由 BaseURL 推导
+	// BaseURL 是该 agent 默认的模型服务地址（OpenAI/Anthropic 兼容）。
+	// 用户可在界面改成自建/第三方网关（如 https://llmapi.qiniu.io/v1）。
+	BaseURL string `json:"baseURL"`
 }
 
 // MCPPresets 返回内置的 MCP server 预设清单。
@@ -67,20 +69,18 @@ func AgentPresets() []AgentPreset {
 		{
 			Key: "claude", Display: "Claude Code", ProxyName: "anthropic",
 			Proxy: config.LLMProxy{
-				Target:    "https://api.anthropic.com",
 				ClientEnv: map[string]string{"ANTHROPIC_BASE_URL": "{proxy}", "ANTHROPIC_API_KEY": "sandbox-placeholder"},
 				Headers:   map[string]string{"x-api-key": "anthropic-key"},
 			},
-			Allowlist: []string{"api.anthropic.com"},
+			BaseURL: "https://api.anthropic.com",
 		},
 		{
 			Key: "codex", Display: "Codex", ProxyName: "openai",
 			Proxy: config.LLMProxy{
-				Target:    "https://api.openai.com",
 				ClientEnv: map[string]string{"OPENAI_API_KEY": "sandbox-placeholder"},
 				Headers:   map[string]string{"Authorization": "Bearer ${openai-key}"},
 			},
-			Allowlist: []string{"api.openai.com"},
+			BaseURL: "https://api.openai.com/v1",
 		},
 	}
 }

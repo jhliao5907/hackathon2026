@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildConfigClaudeGithubFilesystem(t *testing.T) {
-	cfg := BuildConfig("claude", []string{"github", "filesystem"})
+	cfg := BuildConfig("claude", []string{"github", "filesystem"}, "")
 
 	// MCP：两个 server，github 带密钥名、filesystem 无密钥。
 	if len(cfg.MCPServers) != 2 {
@@ -32,13 +32,33 @@ func TestBuildConfigClaudeGithubFilesystem(t *testing.T) {
 }
 
 func TestBuildConfigCodexProxy(t *testing.T) {
-	cfg := BuildConfig("codex", nil)
+	cfg := BuildConfig("codex", nil, "")
 	p, ok := cfg.LLMProxies["openai"]
 	if !ok {
 		t.Fatal("codex 应生成 openai 代理")
 	}
 	if p.Headers["Authorization"] != "Bearer ${openai-key}" {
 		t.Errorf("openai 代理 header 错误: %+v", p.Headers)
+	}
+	// 默认 base URL（https://api.openai.com/v1）→ 代理 target 取其源。
+	if p.Target != "https://api.openai.com" {
+		t.Errorf("默认 target = %q，期望 https://api.openai.com", p.Target)
+	}
+}
+
+func TestBuildConfigCustomBaseURL(t *testing.T) {
+	cfg := BuildConfig("codex", nil, "https://llmapi.qiniu.io/v1")
+	if got := cfg.LLMProxies["openai"].Target; got != "https://llmapi.qiniu.io" {
+		t.Errorf("自定义 target = %q，期望 https://llmapi.qiniu.io（取源，忽略 /v1）", got)
+	}
+	found := false
+	for _, d := range cfg.Allowlist {
+		if d == "llmapi.qiniu.io" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("白名单应含自定义域名 llmapi.qiniu.io，实际: %v", cfg.Allowlist)
 	}
 }
 

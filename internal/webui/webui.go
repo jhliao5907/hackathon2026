@@ -59,6 +59,7 @@ type stateResp struct {
 	Selected     selected              `json:"selected"`
 	Secrets      map[string]bool       `json:"secrets"`      // 密钥名 -> 是否已设置
 	AgentSecrets map[string][]string   `json:"agentSecrets"` // agentKey -> 其模型代理所需密钥名
+	BaseURL      map[string]string     `json:"baseURL"`      // agentKey -> 当前模型服务地址
 }
 
 type selected struct {
@@ -72,13 +73,23 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		MCPPresets:   catalog.MCPPresets(),
 		Secrets:      map[string]bool{},
 		AgentSecrets: map[string][]string{},
+		BaseURL:      map[string]string{},
 	}
-	// 从现有 sandbox.yaml 推断当前已启用的 MCP（存在即选中）。
+	// 各 agent 模型服务地址：默认取预设。
+	for _, a := range catalog.AgentPresets() {
+		resp.BaseURL[a.Key] = a.BaseURL
+	}
+	// 从现有 sandbox.yaml 推断当前已启用的 MCP（存在即选中）与已配置的模型服务地址。
 	resp.Selected.Agent = catalog.AgentPresets()[0].Key
 	if cfg, err := config.Load(s.CfgPath); err == nil {
 		for _, p := range catalog.MCPPresets() {
 			if _, ok := cfg.MCPServers[p.Key]; ok {
 				resp.Selected.Enabled = append(resp.Selected.Enabled, p.Key)
+			}
+		}
+		for _, a := range catalog.AgentPresets() {
+			if px, ok := cfg.LLMProxies[a.ProxyName]; ok && px.Target != "" {
+				resp.BaseURL[a.Key] = px.Target
 			}
 		}
 	}
@@ -119,12 +130,13 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Agent   string   `json:"agent"`
 		Enabled []string `json:"enabled"`
+		BaseURL string   `json:"baseUrl"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "参数错误", http.StatusBadRequest)
 		return
 	}
-	cfg := catalog.BuildConfig(body.Agent, body.Enabled)
+	cfg := catalog.BuildConfig(body.Agent, body.Enabled, body.BaseURL)
 	if err := config.Save(s.CfgPath, cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

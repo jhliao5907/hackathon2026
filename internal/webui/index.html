@@ -53,6 +53,15 @@
   </div>
 
   <div class="card">
+    <h2>模型服务地址（OpenAI / Anthropic 兼容，可填自建或第三方网关）</h2>
+    <div class="secret">
+      <span class="lbl">base URL</span>
+      <input type="text" id="baseUrl" placeholder="如 https://llmapi.qiniu.io/v1">
+    </div>
+    <div class="desc" style="margin-top:6px;color:var(--mut);font-size:12px">留空用默认；真实请求由宿主机代理注入密钥后转发到此地址。</div>
+  </div>
+
+  <div class="card">
     <h2>模型密钥（不进沙箱，由宿主机注入）</h2>
     <div id="agentSecret"></div>
   </div>
@@ -115,10 +124,12 @@ function renderAgents(){
   const box = $('#agents'); box.innerHTML='';
   S.agents.forEach(a => {
     const node = el('span',{class:'agent'+(a.key===agent?' sel':'')}, a.display);
-    node.onclick = () => { agent=a.key; renderAgents(); renderAgentSecret(); renderAllow(); };
+    node.onclick = () => { agent=a.key; $('#baseUrl').value=S.baseURL[agent]||''; renderAgents(); renderAgentSecret(); renderAllow(); };
     box.append(node);
   });
 }
+
+function hostOf(u){ try{ return new URL(u).hostname; }catch(e){ return ''; } }
 
 function renderMCPs(){
   const box = $('#mcps'); box.innerHTML='';
@@ -137,13 +148,14 @@ function renderMCPs(){
 function renderAllow(){
   const box = $('#allow'); box.innerHTML='';
   const set = new Set(['registry.npmjs.org']);
-  const a = S.agents.find(x=>x.key===agent); (a&&a.allowlist||[]).forEach(d=>set.add(d));
+  const h = hostOf($('#baseUrl').value); if(h) set.add(h);
   S.mcpPresets.filter(p=>enabled.has(p.key)).forEach(p=>(p.allowlist||[]).forEach(d=>set.add(d)));
   [...set].sort().forEach(d=>box.append(el('span',{class:'chip'},d)));
 }
 
 async function save(){
-  const r = await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent,enabled:[...enabled]})});
+  const baseUrl = $('#baseUrl').value.trim();
+  const r = await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent,enabled:[...enabled],baseUrl})});
   if(r.ok){ status('已生成 sandbox.yaml（不含任何密钥）','var(--ok)'); return true; }
   status('保存配置失败','var(--danger)'); return false;
 }
@@ -161,6 +173,8 @@ async function init(){
   S = await (await fetch('/api/state')).json();
   agent = S.selected.agent || S.agents[0].key;
   (S.selected.enabled||[]).forEach(k=>enabled.add(k));
+  $('#baseUrl').value = S.baseURL[agent] || '';
+  $('#baseUrl').oninput = renderAllow;
   renderAgents(); renderAgentSecret(); renderMCPs(); renderAllow();
   $('#save').onclick = save;
   $('#launch').onclick = launch;
