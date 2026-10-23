@@ -57,12 +57,23 @@ docker/               agent 容器镜像 + 启动脚本
 
 宿主机侧启动三个服务：broker `:8771`、出网网关 `:8772`、凭据注入代理 `:8773`，审计写入 `./sbx-audit.log`。
 
+## 一键启停本地服务
+
+```bash
+./scripts/sbxctl.sh start     # 确保 Docker、构建、起后端服务 + 配置界面，并打开浏览器
+./scripts/sbxctl.sh status    # 查看进程/端口/Docker 状态
+./scripts/sbxctl.sh stop      # 停止全部本地服务（--stop-docker 可连 Colima 一起停）
+./scripts/sbxctl.sh restart   # 重启  ·  logs 跟踪日志
+```
+
+PID 与日志写入 `.sbx-run/`（已 gitignore）。`start` 可加 `--no-ui` / `--no-serve` / `--no-open`。
+
 ## 图形界面（推荐给最终用户）
 
 不想碰配置文件？一条命令打开图形界面，勾选 MCP、填密钥、一键启动：
 
 ```bash
-./sbx ui        # 本机浏览器打开 http://127.0.0.1:8780
+./sbx ui        # 本机浏览器打开 http://127.0.0.1:8780（或用上面的 sbxctl start）
 ```
 
 界面内可：选择 agent（Claude/Codex）、勾选 MCP 服务（GitHub/文件系统/网页抓取…）、

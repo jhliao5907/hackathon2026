@@ -12,3 +12,6 @@ sandbox.local.yaml
 # 系统/编辑器
 .DS_Store
 *.swp
+
+# 本地服务运行态(PID/日志)
+.sbx-run/
