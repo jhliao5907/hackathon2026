@@ -8,9 +8,10 @@
 #   ./scripts/sbxctl.sh logs      跟踪日志
 #
 # 选项：
-#   start --no-ui / --no-serve    只起其中一个
-#   start --no-open               不自动打开浏览器
-#   stop  --stop-docker           连同 Colima(Docker) 一起停
+#   start               默认只起配置界面(ui)；点"启动沙箱"时 sbx run 自管后端服务
+#   start --serve       额外常驻后端服务(broker/gateway/injector)，用于联调/手动驱动
+#   start --no-ui       不起界面  ·  --no-open 不自动开浏览器
+#   stop  --stop-docker 连同 Colima(Docker) 一起停
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -83,9 +84,11 @@ stop_one(){ # stop_one <name>
 open_browser(){ command -v open >/dev/null 2>&1 && open "http://127.0.0.1:$UI_PORT" >/dev/null 2>&1 || true; }
 
 cmd_start(){
-  local with_ui=1 with_serve=1 do_open=1
+  # 默认只起配置界面 ui（点"启动沙箱"时 sbx run 会自管后端服务，避免端口冲突）。
+  # 需要独立常驻后端（联调/手动驱动）时加 --serve。
+  local with_ui=1 with_serve=0 do_open=1
   for a in "$@"; do case "$a" in
-    --no-ui) with_ui=0;; --no-serve) with_serve=0;; --no-open) do_open=0;;
+    --no-ui) with_ui=0;; --serve) with_serve=1;; --no-open) do_open=0;;
   esac; done
 
   ensure_bin

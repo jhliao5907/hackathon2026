@@ -165,8 +165,8 @@ async function launch(){
   const r = await fetch('/api/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent,enabled:[...enabled]})});
   const d = await r.json();
   if(!d.ok){ status('以下密钥尚未设置，请先填写：'+d.missing.join('、'),'var(--warn)'); return; }
-  if(d.launched) status('已在新终端窗口启动沙箱 ✓  运行：'+d.command,'var(--ok)');
-  else status('配置就绪。请在终端运行：\n  '+d.command,'var(--fg)');
+  if(d.launched) status('已在新终端窗口启动沙箱 ✓\n如未看到窗口，请在终端运行：\n  '+d.command,'var(--ok)');
+  else status('未能自动打开终端'+(d.error?'（'+d.error+'）':'')+'。请手动在终端运行：\n  '+d.command,'var(--warn)');
 }
 
 async function init(){

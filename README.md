@@ -63,13 +63,15 @@ docker/               agent 容器镜像 + 启动脚本
 ## 一键启停本地服务
 
 ```bash
-./scripts/sbxctl.sh start     # 确保 Docker、构建、起后端服务 + 配置界面，并打开浏览器
+./scripts/sbxctl.sh start     # 确保 Docker、构建、起配置界面并打开浏览器
 ./scripts/sbxctl.sh status    # 查看进程/端口/Docker 状态
-./scripts/sbxctl.sh stop      # 停止全部本地服务（--stop-docker 可连 Colima 一起停）
+./scripts/sbxctl.sh stop      # 停止本地服务（--stop-docker 可连 Colima 一起停）
 ./scripts/sbxctl.sh restart   # 重启  ·  logs 跟踪日志
 ```
 
-PID 与日志写入 `.sbx-run/`（已 gitignore）。`start` 可加 `--no-ui` / `--no-serve` / `--no-open`。
+默认只起配置界面；点「启动沙箱」时 `sbx run` 会自管后端服务（broker/gateway/injector），
+避免端口冲突。需要独立常驻后端（联调/手动驱动）时加 `start --serve`。
+PID 与日志写入 `.sbx-run/`（已 gitignore）。
 
 ## 图形界面（推荐给最终用户）
 

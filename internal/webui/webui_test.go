@@ -98,6 +98,19 @@ func TestLaunchReportsMissingSecrets(t *testing.T) {
 	}
 }
 
+func TestLaunchScript(t *testing.T) {
+	got := launchScript("/Applications/My Tools/sbx", "/Users/me/proj dir", "codex")
+	for _, want := range []string{
+		"#!/bin/bash",
+		"cd '/Users/me/proj dir'", // 含空格路径被单引号包裹
+		"exec '/Applications/My Tools/sbx' run 'codex'",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("启动脚本缺少 %q\n实际:\n%s", want, got)
+		}
+	}
+}
+
 func TestServesIndexHTML(t *testing.T) {
 	s, _ := newServer(t)
 	rr := httptest.NewRecorder()

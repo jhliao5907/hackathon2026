@@ -10,8 +10,11 @@ import (
 	_ "embed"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strings"
 
 	"sbx/internal/catalog"
 	"sbx/internal/config"
@@ -162,23 +165,55 @@ func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request) {
 			missing = append(missing, name)
 		}
 	}
-	runCmd := fmt.Sprintf("sbx run %s", body.Agent)
+	exe, _ := os.Executable()
+	if exe == "" {
+		exe = "sbx"
+	}
+	// 展示用命令（绝对路径，避免 sbx 不在 PATH 时复制粘贴跑不起来）。
+	runCmd := fmt.Sprintf("cd %s && %s run %s", s.ProjectDir, exe, body.Agent)
 	if len(missing) > 0 {
 		writeJSON(w, map[string]any{"ok": false, "missing": missing, "command": runCmd})
 		return
 	}
-	// 尝试拉起一个终端运行 agent（TUI 需要终端）；失败则让前端显示命令。
-	launched := s.openTerminal(runCmd)
-	writeJSON(w, map[string]any{"ok": true, "launched": launched, "command": runCmd})
+	// 拉起一个终端窗口运行 agent（TUI 需要终端）；真正检查是否成功，失败则让前端显示命令。
+	launched, err := s.openTerminal(exe, body.Agent)
+	writeJSON(w, map[string]any{"ok": true, "launched": launched, "command": runCmd, "error": errStr(err)})
 }
 
-// openTerminal 在新终端窗口运行命令（目前支持 macOS），返回是否成功拉起。
-func (s *Server) openTerminal(runCmd string) bool {
+// launchScript 生成一个可执行的 .command 脚本内容：进入项目目录并运行 agent。
+// 用 sbx 的绝对路径，避免依赖 PATH；用单引号包裹避免路径含空格/特殊字符时出错。
+func launchScript(exe, dir, agent string) string {
+	return "#!/bin/bash\n" +
+		"cd " + shellSingleQuote(dir) + " || exit 1\n" +
+		"exec " + shellSingleQuote(exe) + " run " + shellSingleQuote(agent) + "\n"
+}
+
+// openTerminal 把启动脚本写成 .command 文件并用 `open` 在 Terminal 里打开（macOS）。
+// 比 osascript 拼字符串稳妥，且无需自动化(Automation)授权。
+func (s *Server) openTerminal(exe, agent string) (bool, error) {
 	if runtime.GOOS != "darwin" {
-		return false
+		return false, nil
 	}
-	script := fmt.Sprintf("tell application \"Terminal\" to do script \"cd %q && %s\"", s.ProjectDir, runCmd)
-	return exec.Command("osascript", "-e", script).Start() == nil
+	path := filepath.Join(os.TempDir(), "sbx-launch-"+agent+".command")
+	if err := os.WriteFile(path, []byte(launchScript(exe, s.ProjectDir, agent)), 0o755); err != nil {
+		return false, err
+	}
+	if err := exec.Command("open", path).Run(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// shellSingleQuote 用单引号安全包裹一个 shell 参数。
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+func errStr(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

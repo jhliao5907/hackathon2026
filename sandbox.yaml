@@ -1,46 +1,21 @@
-# 桌面安全沙箱配置示例
-#
-# 重要：本文件不包含任何敏感值。
-#   - 密钥（api key / token / password）通过 `sbx secret set <名字>` 存入宿主机 Keychain。
-#   - 这里只声明「需要注入哪个环境变量 / 哪个请求头」以及它对应 keyring 里的哪个密钥名。
-#   - 沙箱容器内看不到此文件，也拿不到任何真实密钥。
-
-# 出网白名单：只有这些域名允许从沙箱访问，其余一律拒绝（deny-by-default）。
+# 本文件由 sbx 生成，不含任何敏感值（密钥存于系统 Keychain）。
 allowlist:
-  - api.anthropic.com      # Claude Code 模型调用
-  - api.openai.com         # Codex 模型调用
-  - api.github.com         # github MCP server 调用
-  - registry.npmjs.org     # 容器内按需拉取 npx 包（如需）
-
-# 沙箱内可用的 MCP server 清单。对 Claude Code 与 Codex 通用：
-# 二者都把此处的 server 注册为指向 broker 的无密钥 HTTP 地址。
-# image 非空时，MCP server 跑在受限容器里（--cap-drop ALL、出网走网关），
-# 密钥注入到该容器而非宿主机进程；容器内 agent 只看到 broker 的 HTTP 地址。
+    - api.github.com
+    - api.openai.com
+    - registry.npmjs.org
 mcpServers:
-  github:
-    image: "node:20-slim"
-    command: ["npx", "-y", "@modelcontextprotocol/server-github"]
-    secrets:
-      # 环境变量名 : keyring 中的密钥名
-      GITHUB_PERSONAL_ACCESS_TOKEN: gh-token
-
-# 凭据注入反向代理：让 agent 自身的模型 key 也不进沙箱。
-# 容器把模型请求发到代理，宿主机代理注入真实 key 后转发到 target。
+    github:
+        image: node:20-slim
+        command:
+            - npx
+            - -y
+            - '@modelcontextprotocol/server-github'
+        secrets:
+            GITHUB_PERSONAL_ACCESS_TOKEN: gh-token
 llmProxies:
-  # Claude Code：容器内配置 ANTHROPIC_BASE_URL 指向代理 + 占位 key。
-  anthropic:
-    target: "https://api.anthropic.com"
-    clientEnv:
-      ANTHROPIC_BASE_URL: "{proxy}"              # 注入容器，{proxy} 替换为宿主机代理 URL
-      ANTHROPIC_API_KEY: "sandbox-placeholder"   # 占位值，不是真实密钥
-    headers:
-      x-api-key: anthropic-key                   # 整个值即密钥名
-
-  # Codex：entrypoint 据此写 ~/.codex 自定义 provider（base_url 指向本代理 /openai/v1）。
-  # 容器内 OPENAI_API_KEY 为占位值，真实 key 由代理注入 Authorization 头。
-  openai:
-    target: "https://api.openai.com"
-    clientEnv:
-      OPENAI_API_KEY: "sandbox-placeholder"      # 占位值，不是真实密钥
-    headers:
-      Authorization: "Bearer ${openai-key}"      # 模板：${openai-key} 替换为真实密钥
+    openai:
+        target: https://api.openai.com
+        clientEnv:
+            OPENAI_API_KEY: sandbox-placeholder
+        headers:
+            Authorization: Bearer ${openai-key}
