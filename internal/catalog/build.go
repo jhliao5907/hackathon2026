@@ -65,6 +65,10 @@ func BuildConfig(agentKey string, enabledMCP []string, baseURL, model string) *c
 		if host != "" {
 			domains[host] = struct{}{}
 		}
+		// 固定放行域名（如 Claude Code 的启动预检端点）。
+		for _, d := range a.AlwaysAllow {
+			domains[d] = struct{}{}
+		}
 	}
 
 	for d := range domains {

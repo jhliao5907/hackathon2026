@@ -1,5 +1,6 @@
 # 本文件由 sbx 生成，不含任何敏感值（密钥存于系统 Keychain）。
 allowlist:
+    - api.anthropic.com
     - api.fenno.ai
     - api.github.com
     - registry.npmjs.org
@@ -18,5 +19,6 @@ llmProxies:
             ANTHROPIC_BASE_URL: '{proxy}'
             ANTHROPIC_MODEL: claude-opus-4-8
             ANTHROPIC_SMALL_FAST_MODEL: claude-opus-4-8
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         headers:
             x-api-key: anthropic-key

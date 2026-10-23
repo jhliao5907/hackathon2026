@@ -35,6 +35,10 @@ type AgentPreset struct {
 	// ModelEnvs 是「所选模型名」要注入到的容器环境变量；留空表示用 agent 默认模型。
 	// 第三方网关常只开通部分模型，需显式指定一个它支持的模型。
 	ModelEnvs []string `json:"-"`
+	// AlwaysAllow 是无论模型地址是什么都固定放行的出网域名。
+	// 例：Claude Code 启动时会对 api.anthropic.com 做连通性/区域预检（不走 base URL），
+	// 不放行会导致启动即报 ERR_SOCKET_CLOSED。
+	AlwaysAllow []string `json:"-"`
 }
 
 // MCPPresets 返回内置的 MCP server 预设清单。
@@ -73,11 +77,16 @@ func AgentPresets() []AgentPreset {
 		{
 			Key: "claude", Display: "Claude Code", ProxyName: "anthropic",
 			Proxy: config.LLMProxy{
-				ClientEnv: map[string]string{"ANTHROPIC_BASE_URL": "{proxy}", "ANTHROPIC_API_KEY": "sandbox-placeholder"},
-				Headers:   map[string]string{"x-api-key": "anthropic-key"},
+				ClientEnv: map[string]string{
+					"ANTHROPIC_BASE_URL":                     "{proxy}",
+					"ANTHROPIC_API_KEY":                      "sandbox-placeholder",
+					"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", // 减少 statsig/遥测等旁路流量
+				},
+				Headers: map[string]string{"x-api-key": "anthropic-key"},
 			},
-			BaseURL:   "https://api.anthropic.com",
-			ModelEnvs: []string{"ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL"},
+			BaseURL:     "https://api.anthropic.com",
+			ModelEnvs:   []string{"ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL"},
+			AlwaysAllow: []string{"api.anthropic.com"}, // 启动连通性预检需要
 		},
 		{
 			Key: "codex", Display: "Codex", ProxyName: "openai",
