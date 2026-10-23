@@ -1,0 +1,35 @@
+# 桌面安全沙箱配置示例
+#
+# 重要：本文件不包含任何敏感值。
+#   - 密钥（api key / token / password）通过 `sbx secret set <名字>` 存入宿主机 Keychain。
+#   - 这里只声明「需要注入哪个环境变量 / 哪个请求头」以及它对应 keyring 里的哪个密钥名。
+#   - 沙箱容器内看不到此文件，也拿不到任何真实密钥。
+
+# 出网白名单：只有这些域名允许从沙箱访问，其余一律拒绝（deny-by-default）。
+allowlist:
+  - api.anthropic.com      # Claude Code 模型调用
+  - api.github.com         # github MCP server 调用
+  - registry.npmjs.org     # 容器内按需拉取 npx 包（如需）
+
+# 沙箱内可用的 MCP server 清单。
+# image 非空时，MCP server 跑在受限容器里（--cap-drop ALL、出网走网关），
+# 密钥注入到该容器而非宿主机进程；容器内 agent 只看到 broker 的 HTTP 地址。
+mcpServers:
+  github:
+    image: "node:20-slim"
+    command: ["npx", "-y", "@modelcontextprotocol/server-github"]
+    secrets:
+      # 环境变量名 : keyring 中的密钥名
+      GITHUB_PERSONAL_ACCESS_TOKEN: gh-token
+
+# 凭据注入反向代理：让 agent 自身的模型 key 也不进沙箱。
+# 容器把模型请求发到 {proxy}，宿主机代理注入真实 key 后转发到 target。
+llmProxies:
+  anthropic:
+    target: "https://api.anthropic.com"
+    clientEnv:
+      ANTHROPIC_BASE_URL: "{proxy}"              # 注入容器，{proxy} 替换为宿主机代理 URL
+      ANTHROPIC_API_KEY: "sandbox-placeholder"   # 占位值，不是真实密钥
+    headers:
+      # 请求头名 : keyring 中的密钥名（真实 key 只在宿主机注入）
+      x-api-key: anthropic-key

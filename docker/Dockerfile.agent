@@ -1,0 +1,23 @@
+# 沙箱内运行 agent 的基础镜像。
+# 关键：镜像里不含任何密钥；MCP 配置在容器启动时由 entrypoint 按环境变量生成，
+# 只写 broker 的无密钥 URL。
+FROM node:20-slim
+
+# npx 运行 MCP server、curl 用于演示出网白名单。
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 agent CLI（demo 以 Claude Code 为主；codex/dsh 可按需加装）。
+RUN npm install -g @anthropic-ai/claude-code || true
+
+# 非 root 用户运行，配合 docker run 的 --user 10001:10001。
+RUN useradd -m -u 10001 agent
+ENV HOME=/home/agent
+RUN mkdir -p /home/agent/.claude && chown -R 10001:10001 /home/agent
+
+COPY docker/entrypoint.sh /usr/local/bin/sbx-entrypoint
+RUN chmod +x /usr/local/bin/sbx-entrypoint
+
+USER 10001:10001
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/sbx-entrypoint"]

@@ -1,0 +1,14 @@
+# 编译产物
+/sbx
+*.exe
+
+# 运行时产物
+sbx-audit.log
+serve.log
+
+# 本地配置覆盖（如有）
+sandbox.local.yaml
+
+# 系统/编辑器
+.DS_Store
+*.swp
