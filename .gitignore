@@ -19,3 +19,6 @@ sandbox.local.yaml
 
 # 用户私有配置(由 sbx 生成/界面写入)，不入库避免 pull 覆盖
 sandbox.yaml
+
+# 发布构建产物
+/dist/

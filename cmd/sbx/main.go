@@ -44,10 +44,14 @@ const (
 	runLog        = "sbx-run.log"
 )
 
+// version 由发布构建时通过 -ldflags "-X main.version=vX.Y.Z" 注入。
+var version = "dev"
+
 func main() {
 	root := &cobra.Command{
-		Use:   "sbx",
-		Short: "桌面级安全沙箱：隔离运行 AI agent，密钥不落沙箱",
+		Use:     "sbx",
+		Short:   "桌面级安全沙箱：隔离运行 AI agent，密钥不落沙箱",
+		Version: version,
 	}
 	root.AddCommand(initCmd(), secretCmd(), runCmd(), serveCmd(), uiCmd())
 	if err := root.Execute(); err != nil {
