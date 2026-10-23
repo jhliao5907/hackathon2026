@@ -1,5 +1,8 @@
 # sbx — 桌面级安全沙箱（Demo）
 
+[![CI](https://github.com/jhliao5907/hackathon2026/actions/workflows/ci.yml/badge.svg)](https://github.com/jhliao5907/hackathon2026/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 在隔离的 Docker 容器里运行主流 AI agent（Claude Code / Codex / dsh），
 **配置任何 MCP 时都无需在沙箱内填写任何密钥**。
 
