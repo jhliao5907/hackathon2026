@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"sbx/internal/catalog"
@@ -98,6 +99,22 @@ type stateResp struct {
 	AgentSecrets map[string][]string   `json:"agentSecrets"` // agentKey -> 其模型代理所需密钥名
 	BaseURL      map[string]string     `json:"baseURL"`      // agentKey -> 当前模型服务地址
 	Model        map[string]string     `json:"model"`        // agentKey -> 当前所选模型名
+	CustomMCP    []customMCP           `json:"customMcp"`    // 用户自定义的 MCP server
+	CustomAllow  []string              `json:"customAllow"`  // 用户自定义的出网白名单域名
+}
+
+// customMCP 是界面传入/回显的自定义 MCP server 定义。
+type customMCP struct {
+	Name    string          `json:"name"`
+	Image   string          `json:"image"`
+	Command string          `json:"command"` // 空格分隔的命令行
+	Secrets []customMCPSecret `json:"secrets"`
+}
+
+type customMCPSecret struct {
+	Env     string `json:"env"`
+	KeyName string `json:"keyName"`
+	Value   string `json:"value,omitempty"` // 仅提交时携带；回显时为空
 }
 
 type selected struct {
@@ -113,6 +130,8 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		AgentSecrets: map[string][]string{},
 		BaseURL:      map[string]string{},
 		Model:        map[string]string{},
+		CustomMCP:    []customMCP{},
+		CustomAllow:  []string{},
 	}
 	// 各 agent 模型服务地址：默认取预设。
 	for _, a := range catalog.AgentPresets() {
@@ -120,6 +139,10 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	// 从现有 sandbox.yaml 推断当前已启用的 MCP（存在即选中）与已配置的模型服务地址。
 	resp.Selected.Agent = catalog.AgentPresets()[0].Key
+	presetKeys := map[string]bool{}
+	for _, p := range catalog.MCPPresets() {
+		presetKeys[p.Key] = true
+	}
 	if cfg, err := config.Load(s.CfgPath); err == nil {
 		for _, p := range catalog.MCPPresets() {
 			if _, ok := cfg.MCPServers[p.Key]; ok {
@@ -131,6 +154,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				continue
 			}
+			resp.Selected.Agent = a.Key
 			if px.Target != "" {
 				resp.BaseURL[a.Key] = px.Target
 			}
@@ -138,6 +162,32 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 				if m := px.ClientEnv[a.ModelEnvs[0]]; m != "" {
 					resp.Model[a.Key] = m
 				}
+			}
+		}
+		// 非预设的 MCP server = 用户自定义，回显出来。
+		for name, sv := range cfg.MCPServers {
+			if presetKeys[name] {
+				continue
+			}
+			secs := []customMCPSecret{}
+			for env, keyName := range sv.Secrets {
+				secs = append(secs, customMCPSecret{Env: env, KeyName: keyName})
+			}
+			resp.CustomMCP = append(resp.CustomMCP, customMCP{
+				Name: name, Image: sv.Image, Command: strings.Join(sv.Command, " "), Secrets: secs,
+			})
+			for _, sc := range secs {
+				resp.Secrets[sc.KeyName] = s.Store.Has(sc.KeyName)
+			}
+		}
+		// 非自动得出的白名单域名 = 用户自定义。
+		auto := map[string]bool{}
+		for _, d := range catalog.AutoAllow(resp.Selected.Agent, resp.BaseURL[resp.Selected.Agent], resp.Selected.Enabled) {
+			auto[d] = true
+		}
+		for _, d := range cfg.Allowlist {
+			if !auto[d] {
+				resp.CustomAllow = append(resp.CustomAllow, d)
 			}
 		}
 	}
@@ -176,16 +226,58 @@ func (s *Server) handleSecret(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Agent   string   `json:"agent"`
-		Enabled []string `json:"enabled"`
-		BaseURL string   `json:"baseUrl"`
-		Model   string   `json:"model"`
+		Agent       string      `json:"agent"`
+		Enabled     []string    `json:"enabled"`
+		BaseURL     string      `json:"baseUrl"`
+		Model       string      `json:"model"`
+		CustomMCP   []customMCP `json:"customMcp"`
+		CustomAllow []string    `json:"customAllow"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "参数错误", http.StatusBadRequest)
 		return
 	}
 	cfg := catalog.BuildConfig(body.Agent, body.Enabled, body.BaseURL, body.Model)
+
+	// 合并自定义 MCP server。
+	for _, c := range body.CustomMCP {
+		name := sanitizeName(c.Name)
+		fields := strings.Fields(c.Command)
+		if name == "" || len(fields) == 0 {
+			continue
+		}
+		img := strings.TrimSpace(c.Image)
+		if img == "" {
+			img = "node:20-slim"
+		}
+		secrets := map[string]string{}
+		for _, sec := range c.Secrets {
+			if sec.Env == "" || sec.KeyName == "" {
+				continue
+			}
+			// 提交时若带了值，存进 Keychain（不落盘）。
+			if sec.Value != "" {
+				_ = s.Store.Set(sec.KeyName, sec.Value)
+			}
+			secrets[sec.Env] = sec.KeyName
+		}
+		cfg.MCPServers[name] = config.MCPServer{Image: img, Command: fields, Secrets: secrets}
+	}
+
+	// 合并自定义出网白名单。
+	seen := map[string]bool{}
+	for _, d := range cfg.Allowlist {
+		seen[d] = true
+	}
+	for _, d := range body.CustomAllow {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if d != "" && !seen[d] {
+			seen[d] = true
+			cfg.Allowlist = append(cfg.Allowlist, d)
+		}
+	}
+	sort.Strings(cfg.Allowlist)
+
 	if err := config.Save(s.CfgPath, cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -295,6 +387,17 @@ func errStr(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// sanitizeName 规整自定义 MCP server 名：仅保留字母数字与 -_，小写。
+func sanitizeName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(strings.ToLower(s)) {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

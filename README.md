@@ -81,10 +81,11 @@ PID 与日志写入 `.sbx-run/`（已 gitignore）。
 ./sbx ui        # 本机浏览器打开 http://127.0.0.1:8780（或用上面的 sbxctl start）
 ```
 
-界面内可：选择 agent（Claude/Codex）、设置模型服务地址（支持自建/第三方 OpenAI 兼容网关）、
-勾选 MCP 服务（GitHub/文件系统/网页抓取…）、为需要的服务填密钥（存入系统钥匙串、不进沙箱）、
-查看自动汇总的出网白名单、保存配置并一键启动。全程无需手写 `sandbox.yaml`，也无需知道
-npx 命令、docker 镜像、代理 header 等技术细节。
+界面内可：选择 agent（Claude/Codex）、设置模型服务地址与模型（支持自建/第三方 OpenAI/Anthropic 兼容网关）、
+勾选内置 MCP 服务（GitHub / GitLab / Brave 搜索 / Slack / 文件系统 / 记忆 / 顺序思考）、
+**添加自定义 MCP**（名称 + 命令 + 可选密钥）、**自定义出网白名单域名**、
+为需要的服务填密钥（存入系统钥匙串、不进沙箱）、保存配置并一键启动。
+全程无需手写 `sandbox.yaml`，也无需知道 npx 命令、docker 镜像、代理 header 等技术细节。
 
 「审计日志」标签页可**实时查看**沙箱的全部行为（出网放行/拦截、MCP 调用、模型调用、凭据注入）：
 

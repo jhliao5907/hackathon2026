@@ -38,11 +38,14 @@ type AgentPreset struct {
 	// AlwaysAllow 是无论模型地址是什么都固定放行的出网域名。
 	// 例：Claude Code 启动时会对 api.anthropic.com 做连通性/区域预检（不走 base URL），
 	// 不放行会导致启动即报 ERR_SOCKET_CLOSED。
-	AlwaysAllow []string `json:"-"`
+	AlwaysAllow []string `json:"alwaysAllow"`
 }
 
 // MCPPresets 返回内置的 MCP server 预设清单。
 func MCPPresets() []MCPPreset {
+	npm := func(pkg string, extra ...string) []string {
+		return append([]string{"npx", "-y", pkg}, extra...)
+	}
 	return []MCPPreset{
 		{
 			Key: "github", Display: "GitHub", Desc: "读写 GitHub 仓库 / issue / PR",
@@ -55,18 +58,47 @@ func MCPPresets() []MCPPreset {
 			Allowlist: []string{"api.github.com"},
 		},
 		{
-			Key: "filesystem", Display: "文件系统", Desc: "在允许目录内读写文件（无需密钥）",
-			Image:     "node:20-slim",
-			Command:   []string{"npx", "-y", "@modelcontextprotocol/server-filesystem", "/workspace"},
-			Secrets:   nil,
-			Allowlist: nil,
+			Key: "gitlab", Display: "GitLab", Desc: "读写 GitLab 项目 / issue / MR",
+			Image:   "node:20-slim",
+			Command: npm("@modelcontextprotocol/server-gitlab"),
+			Secrets: []SecretField{{
+				Env: "GITLAB_PERSONAL_ACCESS_TOKEN", KeyName: "gitlab-token", Label: "GitLab 访问令牌",
+			}},
+			Allowlist: []string{"gitlab.com"},
 		},
 		{
-			Key: "fetch", Display: "网页抓取", Desc: "抓取网页并转为文本（无需密钥）",
-			Image:     "node:20-slim",
-			Command:   []string{"npx", "-y", "@modelcontextprotocol/server-fetch"},
-			Secrets:   nil,
-			Allowlist: nil,
+			Key: "brave", Display: "Brave 搜索", Desc: "用 Brave Search 做网页搜索",
+			Image:   "node:20-slim",
+			Command: npm("@modelcontextprotocol/server-brave-search"),
+			Secrets: []SecretField{{
+				Env: "BRAVE_API_KEY", KeyName: "brave-key", Label: "Brave Search API Key",
+			}},
+			Allowlist: []string{"api.search.brave.com"},
+		},
+		{
+			Key: "slack", Display: "Slack", Desc: "读写 Slack 频道与消息",
+			Image:   "node:20-slim",
+			Command: npm("@modelcontextprotocol/server-slack"),
+			Secrets: []SecretField{
+				{Env: "SLACK_BOT_TOKEN", KeyName: "slack-bot-token", Label: "Slack Bot Token"},
+				{Env: "SLACK_TEAM_ID", KeyName: "slack-team-id", Label: "Slack Team ID"},
+			},
+			Allowlist: []string{"slack.com"},
+		},
+		{
+			Key: "filesystem", Display: "文件系统", Desc: "在允许目录内读写文件（无需密钥）",
+			Image:   "node:20-slim",
+			Command: npm("@modelcontextprotocol/server-filesystem", "/workspace"),
+		},
+		{
+			Key: "memory", Display: "记忆", Desc: "基于知识图谱的长期记忆（无需密钥）",
+			Image:   "node:20-slim",
+			Command: npm("@modelcontextprotocol/server-memory"),
+		},
+		{
+			Key: "sequential-thinking", Display: "顺序思考", Desc: "结构化分步推理工具（无需密钥）",
+			Image:   "node:20-slim",
+			Command: npm("@modelcontextprotocol/server-sequential-thinking"),
 		},
 	}
 }

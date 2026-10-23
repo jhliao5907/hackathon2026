@@ -50,6 +50,12 @@
   .ev.egress .k{color:#5b8cff}.ev.mcp .k{color:#38c172}.ev.llm .k{color:#c48cff}.ev.secret .k{color:#e0a106}
   .ev .d{color:var(--fg);white-space:normal;word-break:break-all}
   .allowT{color:#38c172}.denyT{color:#e5534b}
+  .chip.custom{border-color:var(--accent);color:var(--fg)}
+  .chip.custom b{color:var(--mut);cursor:pointer;margin-left:6px;font-weight:700}
+  .cmcp{border:1px dashed var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+  .cmcp .r{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+  .cmcp .r .lbl{min-width:84px;color:var(--mut);font-size:13px}
+  .cmcp .rm{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--danger);padding:4px 10px;font-size:12px}
 </style>
 </head>
 <body>
@@ -89,11 +95,17 @@
   <div class="card">
     <h2>MCP 服务</h2>
     <div id="mcps"></div>
+    <div id="customMcps"></div>
+    <button class="ghost" id="addMcp" style="margin-top:12px;padding:6px 12px;font-size:13px">+ 添加自定义 MCP</button>
   </div>
 
   <div class="card">
     <h2>出网白名单（按所选自动汇总，其余一律拒绝）</h2>
     <div id="allow" class="allow"></div>
+    <div class="secret" style="margin-top:12px">
+      <input type="text" id="allowInput" placeholder="添加自定义域名，如 example.com（子域名自动覆盖）">
+      <button class="ghost" id="addAllow">添加</button>
+    </div>
   </div>
 
   <div class="actions">
@@ -119,6 +131,8 @@
 let S = null;              // 服务端状态
 let agent = null;          // 当前 agent key
 const enabled = new Set(); // 启用的 MCP key
+let cmcps = [];            // 自定义 MCP: {name,image,command,secEnv,secKey,secSet}
+const callow = new Set();  // 自定义白名单域名
 
 const $ = s => document.querySelector(s);
 const el = (t, props={}, kids=[]) => {
@@ -181,14 +195,56 @@ function renderAllow(){
   const box = $('#allow'); box.innerHTML='';
   const set = new Set(['registry.npmjs.org']);
   const h = hostOf($('#baseUrl').value); if(h) set.add(h);
+  const a = S.agents.find(x=>x.key===agent); (a&&a.alwaysAllow||[]).forEach(d=>set.add(d));
   S.mcpPresets.filter(p=>enabled.has(p.key)).forEach(p=>(p.allowlist||[]).forEach(d=>set.add(d)));
   [...set].sort().forEach(d=>box.append(el('span',{class:'chip'},d)));
+  // 自定义域名（可删除）
+  [...callow].sort().forEach(d=>{
+    const x = el('b',{},'×'); x.onclick=()=>{ callow.delete(d); renderAllow(); };
+    box.append(el('span',{class:'chip custom'},[document.createTextNode(d), x]));
+  });
+}
+
+function renderCustomMcps(){
+  const box = $('#customMcps'); box.innerHTML='';
+  cmcps.forEach((c,i)=>{
+    const mk=(ph,val,key)=>{ const inp=el('input',{type:'text',placeholder:ph}); inp.value=val||''; inp.oninput=()=>{c[key]=inp.value;}; return inp; };
+    const rm = el('button',{class:'rm'},'删除'); rm.onclick=()=>{ cmcps.splice(i,1); renderCustomMcps(); };
+    const rows = [
+      el('div',{class:'r'},[el('span',{class:'lbl'},'名称'), mk('如 my-tool',c.name,'name'), rm]),
+      el('div',{class:'r'},[el('span',{class:'lbl'},'命令'), mk('如 npx -y some-mcp-server',c.command,'command')]),
+      el('div',{class:'r'},[el('span',{class:'lbl'},'镜像(可选)'), mk('默认 node:20-slim',c.image,'image')]),
+    ];
+    // 可选一个密钥
+    const envi = mk('环境变量名(可选)，如 API_KEY', c.secEnv,'secEnv');
+    const vali = el('input',{type:'password',placeholder: c.secSet?'已设置，留空不改':'密钥值(可选)'});
+    vali.oninput=()=>{ c.secVal=vali.value; };
+    rows.push(el('div',{class:'r'},[el('span',{class:'lbl'},'密钥'), envi, vali]));
+    box.append(el('div',{class:'cmcp'}, rows));
+  });
+}
+
+function buildCustomMcpPayload(){
+  const out=[];
+  cmcps.forEach(c=>{
+    const name=(c.name||'').trim(); const command=(c.command||'').trim();
+    if(!name||!command) return;
+    const secrets=[];
+    const env=(c.secEnv||'').trim();
+    if(env){
+      const keyName = c.secKey || ('custom-'+name.toLowerCase().replace(/[^a-z0-9_-]/g,'')+'-'+env.toLowerCase().replace(/[^a-z0-9_-]/g,''));
+      secrets.push({env, keyName, value: c.secVal||''});
+    }
+    out.push({name, image:(c.image||'').trim(), command, secrets});
+  });
+  return out;
 }
 
 async function save(){
   const baseUrl = $('#baseUrl').value.trim();
   const model = $('#model').value.trim();
-  const r = await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent,enabled:[...enabled],baseUrl,model})});
+  const payload = {agent,enabled:[...enabled],baseUrl,model,customMcp:buildCustomMcpPayload(),customAllow:[...callow]};
+  const r = await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   if(r.ok){ status('已生成 sandbox.yaml（不含任何密钥）','var(--ok)'); return true; }
   status('保存配置失败','var(--danger)'); return false;
 }
@@ -241,12 +297,18 @@ async function init(){
   S = await (await fetch('/api/state')).json();
   agent = S.selected.agent || S.agents[0].key;
   (S.selected.enabled||[]).forEach(k=>enabled.add(k));
+  (S.customAllow||[]).forEach(d=>callow.add(d));
+  cmcps = (S.customMcp||[]).map(c=>({name:c.name,image:c.image,command:c.command,
+    secEnv:(c.secrets&&c.secrets[0]&&c.secrets[0].env)||'', secKey:(c.secrets&&c.secrets[0]&&c.secrets[0].keyName)||'',
+    secSet:!!(c.secrets&&c.secrets[0]&&S.secrets[c.secrets[0].keyName])}));
   $('#baseUrl').value = S.baseURL[agent] || '';
   $('#model').value = S.model[agent] || '';
   $('#baseUrl').oninput = renderAllow;
-  renderAgents(); renderAgentSecret(); renderMCPs(); renderAllow();
+  renderAgents(); renderAgentSecret(); renderMCPs(); renderCustomMcps(); renderAllow();
   $('#save').onclick = save;
   $('#launch').onclick = launch;
+  $('#addMcp').onclick = ()=>{ cmcps.push({}); renderCustomMcps(); };
+  $('#addAllow').onclick = ()=>{ const v=$('#allowInput').value.trim().toLowerCase(); if(v){ callow.add(v); $('#allowInput').value=''; renderAllow(); } };
   document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>switchView(t.dataset.view));
   $('#refresh').onclick = loadAudit;
   $('#autoref').onchange = startAuto;

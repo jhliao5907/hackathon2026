@@ -23,7 +23,6 @@ func BuildConfig(agentKey string, enabledMCP []string, baseURL, model string) *c
 		MCPServers: map[string]config.MCPServer{},
 		LLMProxies: map[string]config.LLMProxy{},
 	}
-	domains := map[string]struct{}{npmRegistry: {}}
 
 	for _, key := range enabledMCP {
 		p, ok := MCPByKey(key)
@@ -39,17 +38,10 @@ func BuildConfig(agentKey string, enabledMCP []string, baseURL, model string) *c
 			Command: p.Command,
 			Secrets: secrets,
 		}
-		for _, d := range p.Allowlist {
-			domains[d] = struct{}{}
-		}
 	}
 
 	if a, ok := AgentByKey(agentKey); ok {
-		base := strings.TrimSpace(baseURL)
-		if base == "" {
-			base = a.BaseURL
-		}
-		origin, host := originAndHost(base)
+		origin, _ := originAndHost(effectiveBaseURL(a, baseURL))
 		proxy := a.Proxy
 		proxy.Target = origin
 		// 注入所选模型名（第三方网关常只开通部分模型，需显式指定）。
@@ -62,20 +54,44 @@ func BuildConfig(agentKey string, enabledMCP []string, baseURL, model string) *c
 			}
 		}
 		cfg.LLMProxies[a.ProxyName] = proxy
-		if host != "" {
+	}
+
+	cfg.Allowlist = AutoAllow(agentKey, baseURL, enabledMCP)
+	return cfg
+}
+
+// AutoAllow 计算「所选 agent + 启用的 MCP 预设」自动得出的出网白名单域名（去重排序）。
+// 供 BuildConfig 与界面推断「哪些白名单项是自动的、哪些是用户自定义的」。
+func AutoAllow(agentKey, baseURL string, enabledMCP []string) []string {
+	domains := map[string]struct{}{npmRegistry: {}}
+	for _, key := range enabledMCP {
+		if p, ok := MCPByKey(key); ok {
+			for _, d := range p.Allowlist {
+				domains[d] = struct{}{}
+			}
+		}
+	}
+	if a, ok := AgentByKey(agentKey); ok {
+		if _, host := originAndHost(effectiveBaseURL(a, baseURL)); host != "" {
 			domains[host] = struct{}{}
 		}
-		// 固定放行域名（如 Claude Code 的启动预检端点）。
 		for _, d := range a.AlwaysAllow {
 			domains[d] = struct{}{}
 		}
 	}
-
+	out := make([]string, 0, len(domains))
 	for d := range domains {
-		cfg.Allowlist = append(cfg.Allowlist, d)
+		out = append(out, d)
 	}
-	sort.Strings(cfg.Allowlist)
-	return cfg
+	sort.Strings(out)
+	return out
+}
+
+func effectiveBaseURL(a AgentPreset, baseURL string) string {
+	if b := strings.TrimSpace(baseURL); b != "" {
+		return b
+	}
+	return a.BaseURL
 }
 
 // originAndHost 把一个 base URL 解析为「源(scheme://host)」与「主机名」。

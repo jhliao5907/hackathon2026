@@ -80,6 +80,46 @@ func TestSecretThenConfigProducesLoadableYAML(t *testing.T) {
 	}
 }
 
+func TestConfigWithCustomMCPAndAllow(t *testing.T) {
+	s, cfgPath := newServer(t)
+	body := `{"agent":"claude","enabled":["filesystem"],
+	  "customMcp":[{"name":"My Tool!","command":"npx -y some-mcp","secrets":[{"env":"API_KEY","keyName":"my-key","value":"s3cret"}]}],
+	  "customAllow":["example.com","Foo.COM"]}`
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/api/config", strings.NewReader(body)))
+	if rr.Code != 200 {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body)
+	}
+	// 自定义密钥应已存入。
+	if !s.Store.Has("my-key") {
+		t.Error("自定义 MCP 的密钥值应已存入")
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 名称被规整为 mytool；命令按空格拆分；默认镜像。
+	sv, ok := cfg.MCPServers["mytool"]
+	if !ok {
+		t.Fatalf("自定义 MCP 未写入, servers=%v", cfg.MCPServers)
+	}
+	if sv.Image != "node:20-slim" || len(sv.Command) != 3 || sv.Secrets["API_KEY"] != "my-key" {
+		t.Errorf("自定义 MCP 内容错误: %+v", sv)
+	}
+	// 自定义域名应在白名单（小写）。
+	has := func(d string) bool {
+		for _, x := range cfg.Allowlist {
+			if x == d {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("example.com") || !has("foo.com") {
+		t.Errorf("自定义白名单缺失: %v", cfg.Allowlist)
+	}
+}
+
 func TestLaunchReportsMissingSecrets(t *testing.T) {
 	s, _ := newServer(t)
 	rr := httptest.NewRecorder()
