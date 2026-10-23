@@ -171,9 +171,26 @@ func runCmd() *cobra.Command {
 				}
 			}
 
-			// 启动前检查：所有被引用的密钥是否已就绪。
+			// 启动前检查：只校验「本次要跑的 agent」真正需要的密钥——
+			// 即所有 MCP server 的密钥 + 当前 agent 模型代理的密钥。
+			// （配置里可能同时保留了另一个 agent 的代理，不应强制它的密钥也就绪。）
+			req := map[string]bool{}
+			for _, sv := range cfg.MCPServers {
+				for _, kn := range sv.Secrets {
+					req[kn] = true
+				}
+			}
+			if ap, ok := catalog.AgentByKey(agent); ok {
+				if px, ok := cfg.LLMProxies[ap.ProxyName]; ok {
+					for _, hv := range px.Headers {
+						for _, kn := range config.SecretRefs(hv) {
+							req[kn] = true
+						}
+					}
+				}
+			}
 			var missing []string
-			for _, name := range cfg.SecretNames() {
+			for name := range req {
 				if !store.Has(name) {
 					missing = append(missing, name)
 				}

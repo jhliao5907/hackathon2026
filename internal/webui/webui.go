@@ -239,6 +239,20 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := catalog.BuildConfig(body.Agent, body.Enabled, body.BaseURL, body.Model)
 
+	// 保留「非当前 agent」已有的模型代理与其白名单域名：
+	// 避免配好 Codex(如 Qiniu) 后切到 Claude 一保存就把 Codex 的自定义地址覆盖丢失。
+	if old, err := config.Load(s.CfgPath); err == nil {
+		for _, ap := range catalog.AgentPresets() {
+			if ap.Key == body.Agent {
+				continue
+			}
+			if px, ok := old.LLMProxies[ap.ProxyName]; ok {
+				cfg.LLMProxies[ap.ProxyName] = px
+				cfg.Allowlist = append(cfg.Allowlist, catalog.AutoAllow(ap.Key, px.Target, nil)...)
+			}
+		}
+	}
+
 	// 合并自定义 MCP server。
 	for _, c := range body.CustomMCP {
 		name := sanitizeName(c.Name)
@@ -264,19 +278,24 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		cfg.MCPServers[name] = config.MCPServer{Image: img, Command: fields, Secrets: secrets}
 	}
 
-	// 合并自定义出网白名单。
+	// 合并自定义出网白名单，并统一去重排序（涵盖保留另一 agent 时可能引入的重复）。
 	seen := map[string]bool{}
-	for _, d := range cfg.Allowlist {
-		seen[d] = true
-	}
-	for _, d := range body.CustomAllow {
+	var al []string
+	addD := func(d string) {
 		d = strings.ToLower(strings.TrimSpace(d))
 		if d != "" && !seen[d] {
 			seen[d] = true
-			cfg.Allowlist = append(cfg.Allowlist, d)
+			al = append(al, d)
 		}
 	}
-	sort.Strings(cfg.Allowlist)
+	for _, d := range cfg.Allowlist {
+		addD(d)
+	}
+	for _, d := range body.CustomAllow {
+		addD(d)
+	}
+	sort.Strings(al)
+	cfg.Allowlist = al
 
 	if err := config.Save(s.CfgPath, cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

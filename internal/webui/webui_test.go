@@ -120,6 +120,45 @@ func TestConfigWithCustomMCPAndAllow(t *testing.T) {
 	}
 }
 
+func TestConfigPreservesOtherAgentProxy(t *testing.T) {
+	s, cfgPath := newServer(t)
+	h := s.Handler()
+	post := func(b string) {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest("POST", "/api/config", strings.NewReader(b)))
+		if rr.Code != 200 {
+			t.Fatalf("code=%d body=%s", rr.Code, rr.Body)
+		}
+	}
+	// 先配 codex（自定义网关），再配 claude（另一网关）。
+	post(`{"agent":"codex","enabled":[],"baseUrl":"https://gw-a.example/v1"}`)
+	post(`{"agent":"claude","enabled":[],"baseUrl":"https://gw-b.example"}`)
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 两个代理都应存在，各自地址不被覆盖。
+	if cfg.LLMProxies["openai"].Target != "https://gw-a.example" {
+		t.Errorf("codex 地址被覆盖丢失: %+v", cfg.LLMProxies["openai"])
+	}
+	if cfg.LLMProxies["anthropic"].Target != "https://gw-b.example" {
+		t.Errorf("claude 地址错误: %+v", cfg.LLMProxies["anthropic"])
+	}
+	// 两个网关域名都应在白名单。
+	has := func(d string) bool {
+		for _, x := range cfg.Allowlist {
+			if x == d {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("gw-a.example") || !has("gw-b.example") {
+		t.Errorf("白名单缺少某个网关域名: %v", cfg.Allowlist)
+	}
+}
+
 func TestLaunchReportsMissingSecrets(t *testing.T) {
 	s, _ := newServer(t)
 	rr := httptest.NewRecorder()

@@ -16,3 +16,6 @@ sandbox.local.yaml
 
 # 本地服务运行态(PID/日志)
 .sbx-run/
+
+# 用户私有配置(由 sbx 生成/界面写入)，不入库避免 pull 覆盖
+sandbox.yaml
