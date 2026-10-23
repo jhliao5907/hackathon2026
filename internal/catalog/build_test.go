@@ -24,8 +24,8 @@ func TestBuildConfigClaudeGithubFilesystem(t *testing.T) {
 		t.Errorf("应含 anthropic 代理，实际: %v", cfg.LLMProxies)
 	}
 
-	// 白名单：含 github + anthropic + npm registry，去重且有序。
-	want := []string{"api.anthropic.com", "api.github.com", "registry.npmjs.org"}
+	// 白名单：含 github + 默认 anthropic 源 + 固定放行(anthropic.com/claude.com) + npm，去重有序。
+	want := []string{"anthropic.com", "api.anthropic.com", "api.github.com", "claude.com", "registry.npmjs.org"}
 	if !reflect.DeepEqual(cfg.Allowlist, want) {
 		t.Errorf("白名单 = %v，期望 %v", cfg.Allowlist, want)
 	}

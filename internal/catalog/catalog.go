@@ -86,7 +86,9 @@ func AgentPresets() []AgentPreset {
 			},
 			BaseURL:     "https://api.anthropic.com",
 			ModelEnvs:   []string{"ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL"},
-			AlwaysAllow: []string{"api.anthropic.com"}, // 启动连通性预检需要
+			// Claude Code 启动连通性/区域预检需要（直连，不走 base URL）。
+			// 放行整个 anthropic.com / claude.com（网关按子域名匹配，覆盖 api./platform./statsig. 等）。
+			AlwaysAllow: []string{"anthropic.com", "claude.com"},
 		},
 		{
 			Key: "codex", Display: "Codex", ProxyName: "openai",
