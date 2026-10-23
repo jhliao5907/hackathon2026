@@ -188,7 +188,8 @@ func launchScript(exe, dir, agent string) string {
 		"exec " + shellSingleQuote(exe) + " run " + shellSingleQuote(agent) + "\n"
 }
 
-// openTerminal 把启动脚本写成 .command 文件并用 `open` 在 Terminal 里打开（macOS）。
+// openTerminal 把启动脚本写成 .command 文件并用 `open` 在终端里打开（macOS）。
+// 优先用 iTerm（若已安装），否则回退到默认处理器（通常是 Terminal.app）。
 // 比 osascript 拼字符串稳妥，且无需自动化(Automation)授权。
 func (s *Server) openTerminal(exe, agent string) (bool, error) {
 	if runtime.GOOS != "darwin" {
@@ -198,10 +199,38 @@ func (s *Server) openTerminal(exe, agent string) (bool, error) {
 	if err := os.WriteFile(path, []byte(launchScript(exe, s.ProjectDir, agent)), 0o755); err != nil {
 		return false, err
 	}
+	// 优先 iTerm（通过其 AppleScript API 执行；open -a 不会运行 .command）。
+	if itermInstalled() {
+		if err := runInITerm(path); err == nil {
+			return true, nil
+		}
+	}
+	// 回退默认终端（通常是 Terminal.app，会直接执行 .command）。
 	if err := exec.Command("open", path).Run(); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+// itermInstalled 通过 LaunchServices 判断 iTerm 是否安装。
+func itermInstalled() bool {
+	return exec.Command("osascript", "-e", `id of app "iTerm"`).Run() == nil
+}
+
+// runInITerm 让 iTerm 新开窗口运行给定可执行脚本。
+func runInITerm(path string) error {
+	script := `tell application "iTerm"
+  activate
+  create window with default profile command "` + appleScriptEscape(path) + `"
+end tell`
+	return exec.Command("osascript", "-e", script).Run()
+}
+
+// appleScriptEscape 转义 AppleScript 双引号字符串里的特殊字符。
+func appleScriptEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
 }
 
 // shellSingleQuote 用单引号安全包裹一个 shell 参数。

@@ -111,6 +111,12 @@ func TestLaunchScript(t *testing.T) {
 	}
 }
 
+func TestAppleScriptEscape(t *testing.T) {
+	if got := appleScriptEscape(`/tmp/a"b\c`); got != `/tmp/a\"b\\c` {
+		t.Errorf("转义错误: %q", got)
+	}
+}
+
 func TestServesIndexHTML(t *testing.T) {
 	s, _ := newServer(t)
 	rr := httptest.NewRecorder()

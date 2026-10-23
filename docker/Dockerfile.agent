@@ -3,8 +3,10 @@
 # 只写 broker 的无密钥 URL。
 FROM node:20-slim
 
-# npx 运行 MCP server、curl 用于演示出网白名单。
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+# npx 运行 MCP server、curl 演示出网白名单、procps 提供 ps（Codex 后台 app-server 需要）、
+# git 供 agent 常用操作。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl ca-certificates procps git \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 agent CLI（Claude Code + Codex）。
