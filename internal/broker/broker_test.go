@@ -55,6 +55,37 @@ func TestBrokerInjectsSecretAndBridges(t *testing.T) {
 	}
 }
 
+// TestSSEContentNegotiation 验证：当客户端 Accept 含 text/event-stream 时，
+// broker 以 SSE 回单条响应（Codex 的 rmcp 客户端要求此形式）。
+func TestSSEContentNegotiation(t *testing.T) {
+	cfg := &config.Config{
+		MCPServers: map[string]config.MCPServer{
+			"demo": {Command: []string{"sh", "-c",
+				`read line; printf '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n'`}},
+		},
+	}
+	b := New(cfg, fakeSecrets{}, log.New(io.Discard, "", 0), nil, 8772)
+	defer b.Close()
+	srv := httptest.NewServer(b)
+	defer srv.Close()
+
+	req, _ := http.NewRequest("POST", srv.URL+"/demo", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("Content-Type = %q，期望 text/event-stream", ct)
+	}
+	if !bytes.Contains(body, []byte("event: message")) || !bytes.Contains(body, []byte(`"ok":true`)) {
+		t.Fatalf("SSE 响应格式不符，实际: %s", body)
+	}
+}
+
 // TestNotificationReturns202 验证无 id 的通知消息返回 202 且不等待响应。
 func TestNotificationReturns202(t *testing.T) {
 	cfg := &config.Config{

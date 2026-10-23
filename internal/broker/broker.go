@@ -124,8 +124,25 @@ func (b *Broker) handlePost(w http.ResponseWriter, r *http.Request, name string)
 		http.Error(w, "等待 MCP server 响应失败: "+err.Error(), http.StatusGatewayTimeout)
 		return
 	}
+
+	// 内容协商：MCP Streamable-HTTP 规范允许服务端用 application/json 或 text/event-stream 回复。
+	// 部分客户端（如 Codex 的 rmcp）要求 SSE；Accept 含 text/event-stream 时即用 SSE 回单条响应。
+	if acceptsEventStream(r) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "event: message\ndata: %s\n\n", resp)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(resp)
+}
+
+func acceptsEventStream(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept"), "text/event-stream")
 }
 
 // getOrStart 懒启动指定的真实 MCP server 子进程。

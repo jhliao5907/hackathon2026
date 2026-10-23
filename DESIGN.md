@@ -208,6 +208,8 @@ mcpServers:
    - **通知**（无 `id`）→ 写入后直接回 `202 Accepted`，不等待。
    - 单读协程按 `id` 分发响应；server→client 通知当前丢弃。
    - `GET` 返回 `405`（当前不提供 server→client 的 SSE 流，为规范允许的降级）。
+   - **内容协商**：POST 响应按请求 `Accept` 回 `application/json` 或 `text/event-stream`（SSE）。
+     规范允许两者，但部分客户端（如 Codex 的 rmcp）要求 SSE，故 `Accept` 含 `text/event-stream` 时以 SSE 回单条响应。
 
 **MCP server 容器化**：当 `image` 非空时，真实 MCP server 运行在 `docker run -i` 起的受限容器中
 （`--cap-drop ALL`、`no-new-privileges`、出网走网关）。密钥通过 `-e NAME`（不带值）透传——
