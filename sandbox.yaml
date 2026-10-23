@@ -16,5 +16,7 @@ llmProxies:
         clientEnv:
             ANTHROPIC_API_KEY: sandbox-placeholder
             ANTHROPIC_BASE_URL: '{proxy}'
+            ANTHROPIC_MODEL: claude-opus-4-8
+            ANTHROPIC_SMALL_FAST_MODEL: claude-opus-4-8
         headers:
             x-api-key: anthropic-key

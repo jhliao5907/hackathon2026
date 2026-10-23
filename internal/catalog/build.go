@@ -18,7 +18,7 @@ const npmRegistry = "registry.npmjs.org"
 //
 // baseURL 允许用户指向自建/第三方 OpenAI 兼容网关（如 https://llmapi.qiniu.io/v1）。
 // 生成结果不含任何密钥值，仅密钥名。
-func BuildConfig(agentKey string, enabledMCP []string, baseURL string) *config.Config {
+func BuildConfig(agentKey string, enabledMCP []string, baseURL, model string) *config.Config {
 	cfg := &config.Config{
 		MCPServers: map[string]config.MCPServer{},
 		LLMProxies: map[string]config.LLMProxy{},
@@ -52,6 +52,15 @@ func BuildConfig(agentKey string, enabledMCP []string, baseURL string) *config.C
 		origin, host := originAndHost(base)
 		proxy := a.Proxy
 		proxy.Target = origin
+		// 注入所选模型名（第三方网关常只开通部分模型，需显式指定）。
+		if m := strings.TrimSpace(model); m != "" {
+			if proxy.ClientEnv == nil {
+				proxy.ClientEnv = map[string]string{}
+			}
+			for _, env := range a.ModelEnvs {
+				proxy.ClientEnv[env] = m
+			}
+		}
 		cfg.LLMProxies[a.ProxyName] = proxy
 		if host != "" {
 			domains[host] = struct{}{}

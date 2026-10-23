@@ -97,6 +97,7 @@ type stateResp struct {
 	Secrets      map[string]bool       `json:"secrets"`      // 密钥名 -> 是否已设置
 	AgentSecrets map[string][]string   `json:"agentSecrets"` // agentKey -> 其模型代理所需密钥名
 	BaseURL      map[string]string     `json:"baseURL"`      // agentKey -> 当前模型服务地址
+	Model        map[string]string     `json:"model"`        // agentKey -> 当前所选模型名
 }
 
 type selected struct {
@@ -111,6 +112,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		Secrets:      map[string]bool{},
 		AgentSecrets: map[string][]string{},
 		BaseURL:      map[string]string{},
+		Model:        map[string]string{},
 	}
 	// 各 agent 模型服务地址：默认取预设。
 	for _, a := range catalog.AgentPresets() {
@@ -125,8 +127,17 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		for _, a := range catalog.AgentPresets() {
-			if px, ok := cfg.LLMProxies[a.ProxyName]; ok && px.Target != "" {
+			px, ok := cfg.LLMProxies[a.ProxyName]
+			if !ok {
+				continue
+			}
+			if px.Target != "" {
 				resp.BaseURL[a.Key] = px.Target
+			}
+			if len(a.ModelEnvs) > 0 {
+				if m := px.ClientEnv[a.ModelEnvs[0]]; m != "" {
+					resp.Model[a.Key] = m
+				}
 			}
 		}
 	}
@@ -168,12 +179,13 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		Agent   string   `json:"agent"`
 		Enabled []string `json:"enabled"`
 		BaseURL string   `json:"baseUrl"`
+		Model   string   `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "参数错误", http.StatusBadRequest)
 		return
 	}
-	cfg := catalog.BuildConfig(body.Agent, body.Enabled, body.BaseURL)
+	cfg := catalog.BuildConfig(body.Agent, body.Enabled, body.BaseURL, body.Model)
 	if err := config.Save(s.CfgPath, cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

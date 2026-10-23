@@ -74,7 +74,11 @@
       <span class="lbl">base URL</span>
       <input type="text" id="baseUrl" placeholder="如 https://llmapi.qiniu.io/v1">
     </div>
-    <div class="desc" style="margin-top:6px;color:var(--mut);font-size:12px">留空用默认；真实请求由宿主机代理注入密钥后转发到此地址。</div>
+    <div class="secret">
+      <span class="lbl">模型（可选）</span>
+      <input type="text" id="model" placeholder="第三方网关需填其支持的模型，如 claude-opus-4-8；官方可留空">
+    </div>
+    <div class="desc" style="margin-top:6px;color:var(--mut);font-size:12px">留空用 agent 默认模型；第三方网关常只开通部分模型，需显式指定一个它支持的。</div>
   </div>
 
   <div class="card">
@@ -152,7 +156,7 @@ function renderAgents(){
   const box = $('#agents'); box.innerHTML='';
   S.agents.forEach(a => {
     const node = el('span',{class:'agent'+(a.key===agent?' sel':'')}, a.display);
-    node.onclick = () => { agent=a.key; $('#baseUrl').value=S.baseURL[agent]||''; renderAgents(); renderAgentSecret(); renderAllow(); };
+    node.onclick = () => { agent=a.key; $('#baseUrl').value=S.baseURL[agent]||''; $('#model').value=S.model[agent]||''; renderAgents(); renderAgentSecret(); renderAllow(); };
     box.append(node);
   });
 }
@@ -183,7 +187,8 @@ function renderAllow(){
 
 async function save(){
   const baseUrl = $('#baseUrl').value.trim();
-  const r = await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent,enabled:[...enabled],baseUrl})});
+  const model = $('#model').value.trim();
+  const r = await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent,enabled:[...enabled],baseUrl,model})});
   if(r.ok){ status('已生成 sandbox.yaml（不含任何密钥）','var(--ok)'); return true; }
   status('保存配置失败','var(--danger)'); return false;
 }
@@ -237,6 +242,7 @@ async function init(){
   agent = S.selected.agent || S.agents[0].key;
   (S.selected.enabled||[]).forEach(k=>enabled.add(k));
   $('#baseUrl').value = S.baseURL[agent] || '';
+  $('#model').value = S.model[agent] || '';
   $('#baseUrl').oninput = renderAllow;
   renderAgents(); renderAgentSecret(); renderMCPs(); renderAllow();
   $('#save').onclick = save;

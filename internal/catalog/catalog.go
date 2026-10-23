@@ -32,6 +32,9 @@ type AgentPreset struct {
 	// BaseURL 是该 agent 默认的模型服务地址（OpenAI/Anthropic 兼容）。
 	// 用户可在界面改成自建/第三方网关（如 https://llmapi.qiniu.io/v1）。
 	BaseURL string `json:"baseURL"`
+	// ModelEnvs 是「所选模型名」要注入到的容器环境变量；留空表示用 agent 默认模型。
+	// 第三方网关常只开通部分模型，需显式指定一个它支持的模型。
+	ModelEnvs []string `json:"-"`
 }
 
 // MCPPresets 返回内置的 MCP server 预设清单。
@@ -73,7 +76,8 @@ func AgentPresets() []AgentPreset {
 				ClientEnv: map[string]string{"ANTHROPIC_BASE_URL": "{proxy}", "ANTHROPIC_API_KEY": "sandbox-placeholder"},
 				Headers:   map[string]string{"x-api-key": "anthropic-key"},
 			},
-			BaseURL: "https://api.anthropic.com",
+			BaseURL:   "https://api.anthropic.com",
+			ModelEnvs: []string{"ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL"},
 		},
 		{
 			Key: "codex", Display: "Codex", ProxyName: "openai",
@@ -81,7 +85,8 @@ func AgentPresets() []AgentPreset {
 				ClientEnv: map[string]string{"OPENAI_API_KEY": "sandbox-placeholder"},
 				Headers:   map[string]string{"Authorization": "Bearer ${openai-key}"},
 			},
-			BaseURL: "https://api.openai.com/v1",
+			BaseURL:   "https://api.openai.com/v1",
+			ModelEnvs: []string{"SBX_CODEX_MODEL"},
 		},
 	}
 }

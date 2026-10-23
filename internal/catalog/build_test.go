@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildConfigClaudeGithubFilesystem(t *testing.T) {
-	cfg := BuildConfig("claude", []string{"github", "filesystem"}, "")
+	cfg := BuildConfig("claude", []string{"github", "filesystem"}, "", "")
 
 	// MCP：两个 server，github 带密钥名、filesystem 无密钥。
 	if len(cfg.MCPServers) != 2 {
@@ -32,7 +32,7 @@ func TestBuildConfigClaudeGithubFilesystem(t *testing.T) {
 }
 
 func TestBuildConfigCodexProxy(t *testing.T) {
-	cfg := BuildConfig("codex", nil, "")
+	cfg := BuildConfig("codex", nil, "", "")
 	p, ok := cfg.LLMProxies["openai"]
 	if !ok {
 		t.Fatal("codex 应生成 openai 代理")
@@ -46,8 +46,20 @@ func TestBuildConfigCodexProxy(t *testing.T) {
 	}
 }
 
+func TestBuildConfigModelInjection(t *testing.T) {
+	cfg := BuildConfig("claude", nil, "https://api.fenno.ai", "claude-opus-4-8")
+	ce := cfg.LLMProxies["anthropic"].ClientEnv
+	if ce["ANTHROPIC_MODEL"] != "claude-opus-4-8" || ce["ANTHROPIC_SMALL_FAST_MODEL"] != "claude-opus-4-8" {
+		t.Errorf("模型未注入到 clientEnv: %+v", ce)
+	}
+	// 未改动的基础 env 仍在。
+	if ce["ANTHROPIC_BASE_URL"] != "{proxy}" {
+		t.Errorf("基础 clientEnv 丢失: %+v", ce)
+	}
+}
+
 func TestBuildConfigCustomBaseURL(t *testing.T) {
-	cfg := BuildConfig("codex", nil, "https://llmapi.qiniu.io/v1")
+	cfg := BuildConfig("codex", nil, "https://llmapi.qiniu.io/v1", "")
 	if got := cfg.LLMProxies["openai"].Target; got != "https://llmapi.qiniu.io" {
 		t.Errorf("自定义 target = %q，期望 https://llmapi.qiniu.io（取源，忽略 /v1）", got)
 	}
