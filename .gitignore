@@ -4,6 +4,7 @@
 
 # 运行时产物
 sbx-audit.log
+sbx-run.log
 serve.log
 
 # 本地配置覆盖（如有）

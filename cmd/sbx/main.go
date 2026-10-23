@@ -40,6 +40,7 @@ const (
 	injectorPort  = 8773
 	defaultImage  = "sbx-agent:latest"
 	auditLog      = "sbx-audit.log"
+	runLog        = "sbx-run.log"
 )
 
 func main() {
@@ -171,7 +172,15 @@ func runCmd() *cobra.Command {
 				return fmt.Errorf("以下密钥尚未设置，请先运行 `sbx secret set <名字>`: %v", missing)
 			}
 
-			logger := log.New(os.Stderr, "[sbx] ", log.Ltime)
+			// 后端服务日志写入文件，保持终端干净给 agent 的 TUI（否则 broker/gateway
+			// 的日志与 MCP server 横幅会把界面冲花）。打开失败则回退到 stderr。
+			logW := os.Stderr
+			if f, err := os.OpenFile(runLog, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+				logW = f
+				defer f.Close()
+				fmt.Printf("sbx: 后端服务已就绪，服务日志写入 ./%s\n", runLog)
+			}
+			logger := log.New(logW, "[sbx] ", log.Ltime)
 
 			// 启动宿主机侧三服务（broker / gateway / injector）+ 审计。
 			_, cleanup, err := startHostServices(cfg, store, logger)

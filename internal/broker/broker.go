@@ -249,7 +249,9 @@ func startChild(name string, spec config.MCPServer, secretEnv map[string]string,
 		}
 		cmd.Env = env
 	}
-	cmd.Stderr = os.Stderr // 子进程日志直通宿主机终端，便于 demo 观察
+	// 子进程 stderr 跟随 logger 的输出（run 时写文件、serve 时到终端），
+	// 避免 MCP server 的启动横幅污染前台 agent 的 TUI。
+	cmd.Stderr = logger.Writer()
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

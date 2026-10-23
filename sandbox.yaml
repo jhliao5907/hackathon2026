@@ -1,7 +1,7 @@
 # 本文件由 sbx 生成，不含任何敏感值（密钥存于系统 Keychain）。
 allowlist:
     - api.github.com
-    - api.openai.com
+    - llmapi.qiniu.io
     - registry.npmjs.org
 mcpServers:
     github:
@@ -14,7 +14,7 @@ mcpServers:
             GITHUB_PERSONAL_ACCESS_TOKEN: gh-token
 llmProxies:
     openai:
-        target: https://api.openai.com
+        target: https://llmapi.qiniu.io
         clientEnv:
             OPENAI_API_KEY: sandbox-placeholder
         headers:
