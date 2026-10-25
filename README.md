@@ -6,6 +6,10 @@
 在隔离的 Docker 容器里运行主流 AI agent（Claude Code / Codex / dsh），
 **配置任何 MCP 时都无需在沙箱内填写任何密钥**。
 
+## 演示视频
+
+[观看 / 下载演示视频](演示视频.mp4)（MP4，约 223 MB，通过 Git LFS 存储）。
+
 <p align="center">
   <img src="docs/ui.png" alt="sbx 图形配置界面" width="520">
   <br><em>图形配置界面（<code>sbx ui</code>）：勾选 MCP、填密钥、一键启动，无需手写配置</em>
